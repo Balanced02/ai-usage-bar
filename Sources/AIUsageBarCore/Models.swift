@@ -108,6 +108,49 @@ public struct TokenStats: Codable, Sendable, Hashable {
     }
 }
 
+/// Equivalent-cost + token totals for one model or repo.
+public struct ModelCost: Codable, Sendable, Hashable {
+    public var model: String
+    public var tokens: Int
+    public var usd: Double
+    public init(model: String, tokens: Int, usd: Double) {
+        self.model = model; self.tokens = tokens; self.usd = usd
+    }
+}
+
+public struct RepoCost: Codable, Sendable, Hashable {
+    public var repo: String
+    public var tokens: Int
+    public var usd: Double
+    public init(repo: String, tokens: Int, usd: Double) {
+        self.repo = repo; self.tokens = tokens; self.usd = usd
+    }
+}
+
+/// Local cost/token accounting derived from a profile's JSONL logs. On a flat
+/// plan this is an *equivalent API cost*, useful for attribution and mix.
+public struct CostSummary: Codable, Sendable, Hashable {
+    public var todayUSD: Double
+    public var monthUSD: Double
+    public var totalTokens: Int
+    public var byModel: [ModelCost]
+    public var byRepo: [RepoCost]
+    public var cacheHitRatio: Double?   // 0–1
+    public var cacheSavedUSD: Double
+
+    public init(todayUSD: Double, monthUSD: Double, totalTokens: Int,
+                byModel: [ModelCost], byRepo: [RepoCost],
+                cacheHitRatio: Double?, cacheSavedUSD: Double) {
+        self.todayUSD = todayUSD
+        self.monthUSD = monthUSD
+        self.totalTokens = totalTokens
+        self.byModel = byModel
+        self.byRepo = byRepo
+        self.cacheHitRatio = cacheHitRatio
+        self.cacheSavedUSD = cacheSavedUSD
+    }
+}
+
 /// Health of a provider reading.
 public enum UsageStatus: String, Codable, Sendable {
     case ok             // fresh data with at least one window
@@ -131,6 +174,8 @@ public struct ProviderUsage: Codable, Sendable, Hashable, Identifiable {
     public var windows: [UsageWindow]
     public var tokens: TokenStats?
     public var credits: CreditInfo?
+    /// Cost/token accounting from local logs (Claude).
+    public var cost: CostSummary?
     /// True when a limit is currently being hit (Codex `rate_limit_reached_type`).
     public var isThrottled: Bool
     public var status: UsageStatus
@@ -141,7 +186,7 @@ public struct ProviderUsage: Codable, Sendable, Hashable, Identifiable {
 
     public init(id: String, kind: ProviderKind, displayName: String, accountLabel: String? = nil,
                 planType: String? = nil, windows: [UsageWindow] = [], tokens: TokenStats? = nil,
-                credits: CreditInfo? = nil, isThrottled: Bool = false,
+                credits: CreditInfo? = nil, cost: CostSummary? = nil, isThrottled: Bool = false,
                 status: UsageStatus, detail: String? = nil, lastUpdated: Date? = nil, sourcePath: String? = nil) {
         self.id = id
         self.kind = kind
@@ -151,6 +196,7 @@ public struct ProviderUsage: Codable, Sendable, Hashable, Identifiable {
         self.windows = windows
         self.tokens = tokens
         self.credits = credits
+        self.cost = cost
         self.isThrottled = isThrottled
         self.status = status
         self.detail = detail
