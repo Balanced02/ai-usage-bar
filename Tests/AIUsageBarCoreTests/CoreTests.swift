@@ -113,6 +113,39 @@ final class CoreTests: XCTestCase {
         try? fm.removeItem(at: home)
     }
 
+    func testUsageHistoryRecordSeriesAndPersistence() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("hist-\(UUID().uuidString)")
+        let key = UsageHistory.key(providerId: "codex", windowLabel: "5H")
+
+        func codex(_ pct: Double) -> ProviderUsage {
+            ProviderUsage(id: "codex", kind: .codex, displayName: "Codex",
+                          windows: [UsageWindow(kind: .fiveHour, usedPercent: pct, windowMinutes: 300, resetsAt: nil)],
+                          status: .ok)
+        }
+
+        let t0 = Date().addingTimeInterval(-200)  // recent, within the 30-day window
+        let t1 = Date().addingTimeInterval(-100)
+
+        let h = UsageHistory(directory: dir, minInterval: 0)
+        h.record([codex(10)], now: t0)
+        h.record([codex(20)], now: t1)
+        XCTAssertEqual(h.series(forKey: key), [10, 20])
+
+        // Min-interval throttling: a too-soon sample is dropped.
+        let h2 = UsageHistory(directory: fm.temporaryDirectory.appendingPathComponent("hist-\(UUID().uuidString)"),
+                              minInterval: 300)
+        h2.record([codex(10)], now: t0)
+        h2.record([codex(20)], now: t0.addingTimeInterval(100))  // +100s < 300s → skipped
+        XCTAssertEqual(h2.series(forKey: key), [10])
+
+        // Persistence: a fresh instance reads samples back from disk.
+        let reopened = UsageHistory(directory: dir, minInterval: 0)
+        XCTAssertEqual(reopened.series(forKey: key), [10, 20])
+
+        try? fm.removeItem(at: dir)
+    }
+
     // Builds a token_count rollout line like the ones Codex writes.
     private func tokenCountLine(ts: String, p5h: Double, wk: Double, credits: String?, plan: String) -> String {
         let creditsJSON = credits.map { #"{"has_credits":true,"unlimited":false,"balance":"\#($0)"}"# } ?? "null"

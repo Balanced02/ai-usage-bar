@@ -58,6 +58,7 @@ public final class AppModel {
     public var menuBarStyle: MenuBarStyle { didSet { persist(); updateLabel() } }
 
     public let notifier = UsageNotifier()
+    private let history = UsageHistory()
 
     private var service: UsageService
     private var pollTask: Task<Void, Never>?
@@ -106,9 +107,16 @@ public final class AppModel {
         rebuild(local: local)
 
         notifier.evaluate(providers)
+        history.record(providers)
         lastRefresh = Date()
         isRefreshing = false
         writeDebugLog()
+    }
+
+    /// Recent 24h series for a window, for its sparkline.
+    public func sparkline(_ providerId: String, _ window: UsageWindow) -> [Double] {
+        let key = UsageHistory.key(providerId: providerId, windowLabel: window.name ?? window.kind.shortLabel)
+        return history.series(forKey: key, since: Date().addingTimeInterval(-24 * 3600))
     }
 
     /// Rebuilds the ordered provider list (Codex → Claude profiles → Gemini),
