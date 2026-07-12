@@ -65,4 +65,48 @@ final class ProviderSettingsTests: XCTestCase {
         XCTAssertFalse(config.geminiEnabled)
         XCTAssertEqual(config.claudeProfiles.map(\.name), ["Work"])
     }
+
+    @MainActor
+    func testAppModelApplyPersistsValidatedDraftWithoutReadingProviders() async {
+        let suite = "AppModelSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let model = AppModel(defaults: defaults)
+        var draft = model.settingsDraft()
+        draft.codexEnabled = false
+        draft.claudeEnabled = false
+        draft.geminiEnabled = false
+        draft.providerSettings = ProviderSettings(codexHome: URL(fileURLWithPath: "/tmp/codex"))
+
+        let error = await model.apply(draft)
+
+        XCTAssertNil(error)
+        XCTAssertEqual(ProviderSettings.load(from: defaults), draft.providerSettings)
+        XCTAssertFalse(model.codexEnabled)
+        XCTAssertFalse(model.claudeEnabled)
+        XCTAssertFalse(model.geminiEnabled)
+    }
+
+    @MainActor
+    func testAppModelApplyLeavesLiveSettingsUntouchedWhenValidationFails() async {
+        let suite = "AppModelSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let model = AppModel(defaults: defaults)
+        let original = model.settingsDraft()
+        var invalid = original
+        invalid.codexEnabled = false
+        invalid.providerSettings = ProviderSettings(manualClaudeProfiles: [
+            ManualClaudeProfile(name: " ", configDir: URL(fileURLWithPath: "/tmp/claude"))
+        ])
+
+        let error = await model.apply(invalid)
+
+        XCTAssertEqual(error, "Each Claude profile needs a name.")
+        XCTAssertEqual(model.settingsDraft(), original)
+        XCTAssertNil(defaults.object(forKey: "codexEnabled"))
+        XCTAssertEqual(ProviderSettings.load(from: defaults), ProviderSettings())
+    }
 }
