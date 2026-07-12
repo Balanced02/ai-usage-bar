@@ -46,6 +46,16 @@ public enum Theme {
         return "\(m)m"
     }
 
+    /// Masks an email for screen-sharing: "jane.doe@acme.com" → "j•••@•••".
+    /// Hides the domain entirely so the employer isn't revealed.
+    public static func maskEmail(_ s: String) -> String {
+        guard let at = s.firstIndex(of: "@") else {
+            return (s.first.map(String.init) ?? "") + "•••"
+        }
+        let head = s[s.startIndex..<at].first.map(String.init) ?? ""
+        return head + "•••@•••"
+    }
+
     /// Compact USD, e.g. "$254", "$12.3", "$0.04".
     public static func usd(_ v: Double) -> String {
         if v >= 100 { return "$\(Int(v.rounded()))" }

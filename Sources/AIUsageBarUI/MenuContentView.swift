@@ -17,7 +17,8 @@ public struct MenuContentView: View {
                 Divider()
                 KindDetailView(cards: model.cards(for: model.selectedKind),
                                history: { card, window in model.sparkline(card.id, window) },
-                               budget: model.monthlyBudgetUSD)
+                               budget: model.monthlyBudgetUSD,
+                               masked: model.maskAccounts)
             }
 
             Divider()
@@ -104,6 +105,7 @@ public struct MenuContentView: View {
                 }
                 Section {
                     Toggle("Notifications", isOn: $model.notificationsEnabled)
+                    Toggle("Mask account details", isOn: $model.maskAccounts)
                 }
             } label: {
                 Image(systemName: "gearshape")

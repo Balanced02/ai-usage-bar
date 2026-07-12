@@ -9,13 +9,16 @@ public struct KindDetailView: View {
     /// Optional 24h sample lookup for sparklines.
     public var history: ((ProviderUsage, UsageWindow) -> [Double])?
     public var budget: Double
+    public var masked: Bool
 
     public init(cards: [ProviderUsage],
                 history: ((ProviderUsage, UsageWindow) -> [Double])? = nil,
-                budget: Double = 0) {
+                budget: Double = 0,
+                masked: Bool = false) {
         self.cards = cards
         self.history = history
         self.budget = budget
+        self.masked = masked
     }
 
     public var body: some View {
@@ -28,7 +31,7 @@ public struct KindDetailView: View {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                     AccountBlock(usage: card, accent: Theme.accountColor(index),
                                  history: history.map { lookup in { window in lookup(card, window) } },
-                                 budget: budget)
+                                 budget: budget, masked: masked)
                 }
             }
         }
@@ -82,6 +85,7 @@ struct AccountBlock: View {
     let accent: Color
     var history: ((UsageWindow) -> [Double])? = nil
     var budget: Double = 0
+    var masked: Bool = false
 
     private var accountName: String {
         usage.displayName.components(separatedBy: " — ").last ?? usage.displayName
@@ -123,7 +127,7 @@ struct AccountBlock: View {
                 .background(RoundedRectangle(cornerRadius: 7).fill(Color.orange.opacity(0.10)))
             }
             if let cost = usage.cost, cost.totalTokens > 0 {
-                CostSection(cost: cost, budget: budget)
+                CostSection(cost: cost, budget: budget, masked: masked)
             }
             if let note = footnote {
                 Text(note).font(.caption2).foregroundStyle(.secondary)
@@ -189,7 +193,7 @@ struct AccountBlock: View {
             }
             Spacer(minLength: 8)
             if let email = usage.accountLabel {
-                Text(email)
+                Text(masked ? Theme.maskEmail(email) : email)
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
             }

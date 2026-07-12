@@ -58,6 +58,8 @@ public final class AppModel {
     public var menuBarStyle: MenuBarStyle { didSet { persist(); updateLabel() } }
     /// Optional monthly $ budget for the cost gauge (0 = off).
     public var monthlyBudgetUSD: Double { didSet { persist() } }
+    /// Masks emails + repo names in the panel (for screen-sharing).
+    public var maskAccounts: Bool { didSet { persist() } }
 
     public let notifier = UsageNotifier()
     private let history = UsageHistory()
@@ -74,6 +76,7 @@ public final class AppModel {
         notificationsEnabled = defaults.object(forKey: "notificationsEnabled") as? Bool ?? true
         menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .text
         monthlyBudgetUSD = defaults.object(forKey: "monthlyBudgetUSD") as? Double ?? 0
+        maskAccounts = defaults.object(forKey: "maskAccounts") as? Bool ?? false
         service = UsageService(config: Self.buildConfig(codex: true, claude: true, gemini: true))
         reconfigure()
         notifier.enabled = notificationsEnabled
@@ -269,6 +272,7 @@ public final class AppModel {
         defaults.set(notificationsEnabled, forKey: "notificationsEnabled")
         defaults.set(menuBarStyle.rawValue, forKey: "menuBarStyle")
         defaults.set(monthlyBudgetUSD, forKey: "monthlyBudgetUSD")
+        defaults.set(maskAccounts, forKey: "maskAccounts")
     }
 
     private func reconfigure() {

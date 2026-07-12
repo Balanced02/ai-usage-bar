@@ -6,11 +6,13 @@ import AIUsageBarCore
 public struct CostSection: View {
     let cost: CostSummary
     let budget: Double
+    let masked: Bool
     @State private var expanded: Bool
 
-    public init(cost: CostSummary, budget: Double = 0, expanded: Bool = false) {
+    public init(cost: CostSummary, budget: Double = 0, masked: Bool = false, expanded: Bool = false) {
         self.cost = cost
         self.budget = budget
+        self.masked = masked
         self._expanded = State(initialValue: expanded)
     }
 
@@ -112,9 +114,9 @@ public struct CostSection: View {
     private var repos: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("By project").font(.caption2).foregroundStyle(.tertiary)
-            ForEach(cost.byRepo.prefix(4), id: \.repo) { r in
+            ForEach(Array(cost.byRepo.prefix(4).enumerated()), id: \.element.repo) { idx, r in
                 HStack(spacing: 8) {
-                    Text(r.repo)
+                    Text(masked ? "Project \(idx + 1)" : r.repo)
                         .font(.caption2).lineLimit(1).truncationMode(.middle)
                         .frame(width: 104, alignment: .leading)
                     MeterBar(percent: r.usd / repoMax * 100, height: 5, color: .secondary.opacity(0.55))
