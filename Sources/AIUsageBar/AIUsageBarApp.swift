@@ -29,18 +29,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentViewController = host
         popover.behavior = .transient
 
-        // The menu-bar item.
+        // The menu-bar item. Left-click opens the popover; right-click shows a
+        // quick menu without opening it.
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.imagePosition = .imageOnly
         statusItem.button?.target = self
-        statusItem.button?.action = #selector(togglePopover)
+        statusItem.button?.action = #selector(handleClick)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
         updateButtonImage()
         observeLabel()
         model.startPolling()
     }
 
-    @objc private func togglePopover() {
+    @objc private func handleClick() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            showQuickMenu()
+        } else {
+            togglePopover()
+        }
+    }
+
+    private func togglePopover() {
         guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(nil)
@@ -48,6 +58,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    // MARK: Right-click quick menu
+
+    private func showQuickMenu() {
+        let menu = NSMenu()
+
+        item(menu, "Refresh now", #selector(refreshNow), key: "r")
+        menu.addItem(.separator())
+
+        for kind in model.kinds {
+            for card in model.cards(for: kind) {
+                let peek = NSMenuItem(title: model.peek(card), action: nil, keyEquivalent: "")
+                peek.isEnabled = false
+                menu.addItem(peek)
+            }
+        }
+        menu.addItem(.separator())
+
+        item(menu, "Copy snapshot", #selector(copySnapshotAction), key: "c")
+
+        let dashboards = NSMenu()
+        for kind in model.kinds where Theme.dashboardURL(for: kind) != nil {
+            let d = NSMenuItem(title: Theme.kindName(kind), action: #selector(openDashboard(_:)), keyEquivalent: "")
+            d.representedObject = Theme.dashboardURL(for: kind)
+            d.target = self
+            dashboards.addItem(d)
+        }
+        let dashParent = NSMenuItem(title: "Open dashboard", action: nil, keyEquivalent: "")
+        menu.addItem(dashParent)
+        menu.setSubmenu(dashboards, for: dashParent)
+
+        menu.addItem(.separator())
+        item(menu, "Quit", #selector(quit), key: "q")
+
+        if let button = statusItem.button {
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY + 4), in: button)
+        }
+    }
+
+    private func item(_ menu: NSMenu, _ title: String, _ action: Selector, key: String) {
+        let i = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        i.target = self
+        menu.addItem(i)
+    }
+
+    @objc private func refreshNow() { Task { await model.refresh() } }
+    @objc private func copySnapshotAction() { model.copySnapshot() }
+    @objc private func quit() { NSApplication.shared.terminate(nil) }
+    @objc private func openDashboard(_ sender: NSMenuItem) {
+        if let url = sender.representedObject as? URL { NSWorkspace.shared.open(url) }
     }
 
     private func updateButtonImage() {

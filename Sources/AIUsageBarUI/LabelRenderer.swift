@@ -22,6 +22,16 @@ public enum LabelRenderer {
     }
 
     @MainActor
+    public static func renderNumber(percent: Double?) -> NSImage {
+        image(MenuBarNumberView(percent: percent))
+    }
+
+    @MainActor
+    public static func renderDot(percent: Double?) -> NSImage {
+        image(MenuBarDotView(percent: percent))
+    }
+
+    @MainActor
     private static func image(_ view: some View) -> NSImage {
         let renderer = ImageRenderer(content: view)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2

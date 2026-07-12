@@ -83,8 +83,9 @@ public struct MenuContentView: View {
                 }
                 Section("Menu bar") {
                     Picker("Style", selection: $model.menuBarStyle) {
-                        Text("Text (Cx 2%)").tag(MenuBarStyle.text)
-                        Text("Meters").tag(MenuBarStyle.meters)
+                        ForEach(MenuBarStyle.allCases, id: \.self) { style in
+                            Text(style.label).tag(style)
+                        }
                     }
                     .pickerStyle(.inline)
                 }

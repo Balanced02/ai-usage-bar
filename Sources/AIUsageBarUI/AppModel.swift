@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Observation
 import ServiceManagement
 import AIUsageBarCore
@@ -19,8 +20,19 @@ public struct LabelChip: Identifiable, Sendable {
 
 /// How the menu-bar title is drawn.
 public enum MenuBarStyle: String, Sendable, CaseIterable {
-    case text    // "Cx 2%  Cl 30%"
-    case meters  // tiny dual-bar meters per provider
+    case text     // "Cx 2%  Cl 30%"
+    case meters   // tiny dual-bar meters per provider
+    case number   // worst window as a single colored "85%"
+    case dot      // a single traffic-light dot
+
+    public var label: String {
+        switch self {
+        case .text: return "Text (Cx 2%)"
+        case .meters: return "Meters"
+        case .number: return "Number (85%)"
+        case .dot: return "Dot"
+        }
+    }
 }
 
 @MainActor
@@ -115,7 +127,37 @@ public final class AppModel {
         switch menuBarStyle {
         case .text: labelImage = LabelRenderer.render(chips: labelChips())
         case .meters: labelImage = LabelRenderer.renderMeters(items: meterItems())
+        case .number: labelImage = LabelRenderer.renderNumber(percent: overallWorst)
+        case .dot: labelImage = LabelRenderer.renderDot(percent: overallWorst)
         }
+    }
+
+    /// Highest window % across every provider/account (for number/dot styles).
+    public var overallWorst: Double? {
+        providers.compactMap { $0.maxUsedPercent }.max()
+    }
+
+    /// One-line summary of a card, e.g. "Claude — Work: 5H 73% · 7D 7%".
+    public func peek(_ card: ProviderUsage) -> String {
+        if card.windows.isEmpty {
+            return "\(card.displayName): \(card.detail ?? Theme.statusText(card.status))"
+        }
+        let ws = card.windows
+            .map { "\($0.name ?? $0.kind.shortLabel) \(Int(($0.usedPercent ?? 0).rounded()))%" }
+            .joined(separator: " · ")
+        return "\(card.displayName): \(ws)"
+    }
+
+    /// Multi-line snapshot of all providers, for sharing.
+    public func snapshotText() -> String {
+        var lines = ["AI Usage"]
+        for kind in kinds { for card in cards(for: kind) { lines.append(peek(card)) } }
+        return lines.joined(separator: "\n")
+    }
+
+    public func copySnapshot() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(snapshotText(), forType: .string)
     }
 
     /// One dual-bar meter item per provider kind (worst 5h / weekly across accounts).
