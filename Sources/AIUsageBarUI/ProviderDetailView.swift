@@ -6,7 +6,13 @@ import AIUsageBarCore
 /// this shows Personal + Work together, each color-coded, with per-model windows.
 public struct KindDetailView: View {
     public let cards: [ProviderUsage]
-    public init(cards: [ProviderUsage]) { self.cards = cards }
+    /// Optional 24h sample lookup for sparklines.
+    public var history: ((ProviderUsage, UsageWindow) -> [Double])?
+
+    public init(cards: [ProviderUsage], history: ((ProviderUsage, UsageWindow) -> [Double])? = nil) {
+        self.cards = cards
+        self.history = history
+    }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -16,7 +22,8 @@ public struct KindDetailView: View {
             }
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                    AccountBlock(usage: card, accent: Theme.accountColor(index))
+                    AccountBlock(usage: card, accent: Theme.accountColor(index),
+                                 history: history.map { lookup in { window in lookup(card, window) } })
                 }
             }
         }
@@ -68,6 +75,7 @@ struct RecommendationBanner: View {
 struct AccountBlock: View {
     let usage: ProviderUsage
     let accent: Color
+    var history: ((UsageWindow) -> [Double])? = nil
 
     private var accountName: String {
         usage.displayName.components(separatedBy: " — ").last ?? usage.displayName
@@ -94,7 +102,7 @@ struct AccountBlock: View {
                 emptyState
             } else {
                 VStack(spacing: 12) {
-                    ForEach(usage.windows) { WindowRow(window: $0, accent: accent) }
+                    ForEach(usage.windows) { WindowRow(window: $0, accent: accent, samples: history?($0) ?? []) }
                 }
                 if let note = footnote {
                     Text(note).font(.caption2).foregroundStyle(.secondary)
@@ -170,6 +178,7 @@ struct AccountBlock: View {
 struct WindowRow: View {
     let window: UsageWindow
     let accent: Color
+    var samples: [Double] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -180,6 +189,11 @@ struct WindowRow: View {
                 Text(window.usedPercent.map { "\(Int($0.rounded()))%" } ?? "—")
                     .font(.system(size: 17, weight: .bold)).monospacedDigit()
                     .foregroundStyle((window.usedPercent ?? 0) >= 90 ? .red : .primary)
+                if samples.count >= 3 {
+                    Sparkline(values: samples, color: accent)
+                        .frame(width: 42, height: 12)
+                        .padding(.leading, 2)
+                }
                 Spacer(minLength: 8)
                 if let reset = Theme.resetText(for: window) {
                     Text(reset).font(.caption).foregroundStyle(.secondary)

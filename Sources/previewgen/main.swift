@@ -16,6 +16,20 @@ func png(_ view: some View, scale: CGFloat = 2) -> Data? {
     return rep.representation(using: .png, properties: [:])
 }
 
+// Synthetic 24h series so sparklines show in the static previews.
+func syntheticHistory(_ card: ProviderUsage, _ window: UsageWindow) -> [Double] {
+    let p = window.usedPercent ?? 0
+    let n = 24
+    return (0..<n).map { i in
+        let frac = Double(i) / Double(n - 1)
+        if window.kind == .fiveHour {
+            let saw = (frac * 3).truncatingRemainder(dividingBy: 1.0)  // reset sawtooth
+            return min(100, saw * p * 1.3)
+        }
+        return frac * p  // weekly ramp
+    }
+}
+
 // A non-interactive panel mirroring MenuContentView for snapshots.
 struct PreviewPanel: View {
     let title: String
@@ -34,7 +48,7 @@ struct PreviewPanel: View {
                        worst: { k in providers.filter { $0.kind == k }.compactMap { $0.maxUsedPercent }.max() },
                        selection: .constant(kind))
             Divider()
-            KindDetailView(cards: providers.filter { $0.kind == kind })
+            KindDetailView(cards: providers.filter { $0.kind == kind }, history: syntheticHistory)
             Divider()
             HStack {
                 Image(systemName: "checkmark.square.fill").foregroundStyle(.blue)

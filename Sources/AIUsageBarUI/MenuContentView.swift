@@ -15,7 +15,8 @@ public struct MenuContentView: View {
             } else {
                 KindTabBar(kinds: model.kinds, worst: model.worstPercent(for:), selection: $model.selectedKind)
                 Divider()
-                KindDetailView(cards: model.cards(for: model.selectedKind))
+                KindDetailView(cards: model.cards(for: model.selectedKind),
+                               history: { card, window in model.sparkline(card.id, window) })
             }
 
             Divider()
