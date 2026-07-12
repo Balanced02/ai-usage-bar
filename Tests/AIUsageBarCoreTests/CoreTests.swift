@@ -146,11 +146,54 @@ final class CoreTests: XCTestCase {
         try? fm.removeItem(at: dir)
     }
 
+    func testUsageServiceReadsConfiguredLocalRoots() async throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("roots-\(UUID().uuidString)")
+        let codex = root.appendingPathComponent("codex")
+        let gemini = root.appendingPathComponent("gemini")
+        let day = codex.appendingPathComponent("sessions/2026/07/13")
+        try fm.createDirectory(at: day, withIntermediateDirectories: true)
+        try fm.createDirectory(at: gemini, withIntermediateDirectories: true)
+        try (tokenCountLine(ts: "2026-07-13T10:00:00.000Z", p5h: 10, wk: 20,
+                            credits: nil, plan: "pro") + "\n")
+            .write(to: day.appendingPathComponent("rollout-test.jsonl"), atomically: true, encoding: .utf8)
+        try #"{"selectedAuthType":"oauth"}"#.write(
+            to: gemini.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
+
+        let config = UsageConfig(codexEnabled: true, claudeEnabled: false, geminiEnabled: true,
+                                 codexHome: codex, geminiHome: gemini)
+        let service = UsageService(config: config)
+        let local = await service.readLocal()
+        let refreshed = await service.refresh()
+        let refreshedCodex = refreshed.first { $0.id == "codex" }
+        let refreshedGemini = refreshed.first { $0.id == "gemini" }
+
+        XCTAssertTrue(hasSourcePath(local.codex?.sourcePath, rootedAt: codex))
+        XCTAssertEqual(local.gemini?.sourcePath, gemini.path)
+        XCTAssertEqual(local.gemini?.planType, "Google login")
+        XCTAssertTrue(hasSourcePath(refreshedCodex?.sourcePath, rootedAt: codex))
+        XCTAssertEqual(refreshedGemini?.sourcePath, gemini.path)
+        XCTAssertEqual(refreshedGemini?.planType, "Google login")
+        try? fm.removeItem(at: root)
+    }
+
+    func testCodexReaderReportsConfiguredSessionsPath() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("missing-\(UUID().uuidString)")
+        let usage = CodexReader(codexHome: root).read()
+        XCTAssertEqual(usage.detail, "No \(root.appendingPathComponent("sessions").path) found")
+    }
+
     // Builds a token_count rollout line like the ones Codex writes.
     private func tokenCountLine(ts: String, p5h: Double, wk: Double, credits: String?, plan: String) -> String {
         let creditsJSON = credits.map { #"{"has_credits":true,"unlimited":false,"balance":"\#($0)"}"# } ?? "null"
         return """
         {"timestamp":"\(ts)","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":50,"total_tokens":150},"model_context_window":200000},"rate_limits":{"limit_id":"codex","plan_type":"\(plan)","primary":{"used_percent":\(p5h),"window_minutes":300,"resets_at":1784488331},"secondary":{"used_percent":\(wk),"window_minutes":10080,"resets_at":1784900000},"credits":\(creditsJSON),"rate_limit_reached_type":null}}}
         """
+    }
+
+    private func hasSourcePath(_ sourcePath: String?, rootedAt root: URL) -> Bool {
+        guard let sourcePath else { return false }
+        return URL(fileURLWithPath: sourcePath).resolvingSymlinksInPath().pathComponents
+            .starts(with: root.resolvingSymlinksInPath().pathComponents)
     }
 }
