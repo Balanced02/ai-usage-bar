@@ -19,7 +19,7 @@ public struct LabelChip: Identifiable, Sendable {
 }
 
 /// How the menu-bar title is drawn.
-public enum MenuBarStyle: String, Sendable, CaseIterable {
+public enum MenuBarStyle: String, Sendable, CaseIterable, Equatable {
     case text     // "Cx 2%  Cl 30%"
     case meters   // tiny dual-bar meters per provider
     case number   // worst window as a single colored "85%"
@@ -33,6 +33,18 @@ public enum MenuBarStyle: String, Sendable, CaseIterable {
         case .dot: return "Dot"
         }
     }
+}
+
+/// The complete, editable settings state shown by the settings window.
+public struct SettingsDraft: Equatable {
+    public var cadenceSeconds: Double
+    public var codexEnabled: Bool
+    public var claudeEnabled: Bool
+    public var geminiEnabled: Bool
+    public var notificationsEnabled: Bool
+    public var menuBarStyle: MenuBarStyle
+    public var launchAtLogin: Bool
+    public var providerSettings: ProviderSettings
 }
 
 @MainActor
@@ -50,29 +62,44 @@ public final class AppModel {
     private let debugEnabled = ProcessInfo.processInfo.environment["AIUSAGEBAR_DEBUG"] != nil
 
     // Settings (persisted).
-    public var cadenceSeconds: Double { didSet { persist(); } }
-    public var codexEnabled: Bool { didSet { persist(); reconfigure() } }
-    public var claudeEnabled: Bool { didSet { persist(); reconfigure() } }
-    public var geminiEnabled: Bool { didSet { persist(); reconfigure() } }
-    public var notificationsEnabled: Bool { didSet { persist(); notifier.enabled = notificationsEnabled } }
-    public var menuBarStyle: MenuBarStyle { didSet { persist(); updateLabel() } }
+    public var cadenceSeconds: Double
+    public var codexEnabled: Bool
+    public var claudeEnabled: Bool
+    public var geminiEnabled: Bool
+    public var notificationsEnabled: Bool
+    public var menuBarStyle: MenuBarStyle
+    private var providerSettings: ProviderSettings
 
     public let notifier = UsageNotifier()
     private let history = UsageHistory()
 
     private var service: UsageService
     private var pollTask: Task<Void, Never>?
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
-    public init() {
-        cadenceSeconds = defaults.object(forKey: "cadenceSeconds") as? Double ?? 45
-        codexEnabled = defaults.object(forKey: "codexEnabled") as? Bool ?? true
-        claudeEnabled = defaults.object(forKey: "claudeEnabled") as? Bool ?? true
-        geminiEnabled = defaults.object(forKey: "geminiEnabled") as? Bool ?? true
-        notificationsEnabled = defaults.object(forKey: "notificationsEnabled") as? Bool ?? true
-        menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .text
-        service = UsageService(config: Self.buildConfig(codex: true, claude: true, gemini: true))
-        reconfigure()
+    public init(defaults: UserDefaults = .standard) {
+        let cadenceSeconds = defaults.object(forKey: "cadenceSeconds") as? Double ?? 45
+        let codexEnabled = defaults.object(forKey: "codexEnabled") as? Bool ?? true
+        let claudeEnabled = defaults.object(forKey: "claudeEnabled") as? Bool ?? true
+        let geminiEnabled = defaults.object(forKey: "geminiEnabled") as? Bool ?? true
+        let notificationsEnabled = defaults.object(forKey: "notificationsEnabled") as? Bool ?? true
+        let menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .text
+        let providerSettings = ProviderSettings.load(from: defaults)
+
+        self.defaults = defaults
+        self.cadenceSeconds = cadenceSeconds
+        self.codexEnabled = codexEnabled
+        self.claudeEnabled = claudeEnabled
+        self.geminiEnabled = geminiEnabled
+        self.notificationsEnabled = notificationsEnabled
+        self.menuBarStyle = menuBarStyle
+        self.providerSettings = providerSettings
+        self.service = UsageService(config: Self.usageConfig(
+            providerSettings: providerSettings,
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled
+        ))
         notifier.enabled = notificationsEnabled
     }
 
@@ -249,6 +276,7 @@ public final class AppModel {
     public var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }
         set {
+            guard newValue != launchAtLogin else { return }
             do {
                 if newValue { try SMAppService.mainApp.register() }
                 else { try SMAppService.mainApp.unregister() }
@@ -258,6 +286,65 @@ public final class AppModel {
         }
     }
 
+    public func settingsDraft() -> SettingsDraft {
+        SettingsDraft(
+            cadenceSeconds: cadenceSeconds,
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            notificationsEnabled: notificationsEnabled,
+            menuBarStyle: menuBarStyle,
+            launchAtLogin: launchAtLogin,
+            providerSettings: providerSettings
+        )
+    }
+
+    public func automaticClaudeProfiles() -> [ClaudeProfile] {
+        ClaudeProfileDiscovery.discover()
+    }
+
+    /// Validates and applies every setting as a single refresh operation.
+    /// Returns a validation message without changing live state when invalid.
+    public func apply(_ draft: SettingsDraft) async -> String? {
+        let discovered = ClaudeProfileDiscovery.discover()
+        var config: UsageConfig
+        do {
+            config = try draft.providerSettings.usageConfig(
+                codexEnabled: draft.codexEnabled,
+                claudeEnabled: draft.claudeEnabled,
+                geminiEnabled: draft.geminiEnabled,
+                discoveredProfiles: discovered
+            )
+        } catch {
+            return error.localizedDescription
+        }
+        Self.applyRuntimeOverrides(to: &config)
+
+        let existingProfiles = Self.usageConfig(
+            providerSettings: providerSettings,
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            discovered: discovered
+        ).claudeProfiles
+
+        cadenceSeconds = draft.cadenceSeconds
+        codexEnabled = draft.codexEnabled
+        claudeEnabled = draft.claudeEnabled
+        geminiEnabled = draft.geminiEnabled
+        notificationsEnabled = draft.notificationsEnabled
+        menuBarStyle = draft.menuBarStyle
+        providerSettings = draft.providerSettings
+        notifier.enabled = notificationsEnabled
+        launchAtLogin = draft.launchAtLogin
+        persist()
+
+        if existingProfiles != config.claudeProfiles { lastClaude = [] }
+        await service.update(config: config)
+        await refresh()
+        return nil
+    }
+
     private func persist() {
         defaults.set(cadenceSeconds, forKey: "cadenceSeconds")
         defaults.set(codexEnabled, forKey: "codexEnabled")
@@ -265,23 +352,34 @@ public final class AppModel {
         defaults.set(geminiEnabled, forKey: "geminiEnabled")
         defaults.set(notificationsEnabled, forKey: "notificationsEnabled")
         defaults.set(menuBarStyle.rawValue, forKey: "menuBarStyle")
+        providerSettings.save(to: defaults)
     }
 
-    private func reconfigure() {
-        let config = Self.buildConfig(codex: codexEnabled, claude: claudeEnabled, gemini: geminiEnabled)
-        Task { await service.update(config: config) }
+    private static func usageConfig(providerSettings: ProviderSettings,
+                                    codexEnabled: Bool,
+                                    claudeEnabled: Bool,
+                                    geminiEnabled: Bool,
+                                    discovered: [ClaudeProfile] = ClaudeProfileDiscovery.discover()) -> UsageConfig {
+        var config = (try? providerSettings.usageConfig(
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            discoveredProfiles: discovered
+        )) ?? UsageConfig(
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            claudeProfiles: discovered
+        )
+        applyRuntimeOverrides(to: &config)
+        return config
     }
 
-    private static func buildConfig(codex: Bool, claude: Bool, gemini: Bool) -> UsageConfig {
-        var config = UsageConfig.autoDetect()
-        config.codexEnabled = codex
-        config.claudeEnabled = claude
-        config.geminiEnabled = gemini
+    private static func applyRuntimeOverrides(to config: inout UsageConfig) {
         // Dev/test escape hatch: skip Keychain + live endpoint (Claude falls back
         // to local token activity). Set AIUSAGEBAR_NO_KEYCHAIN=1 to enable.
         if ProcessInfo.processInfo.environment["AIUSAGEBAR_NO_KEYCHAIN"] != nil {
             config.allowKeychain = false
         }
-        return config
     }
 }
