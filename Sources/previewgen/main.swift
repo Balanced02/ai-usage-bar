@@ -57,6 +57,7 @@ struct PreviewPanel: View {
     let title: String
     let providers: [ProviderUsage]
     let kind: ProviderKind
+    var masked: Bool = false
     var body: some View {
         let kinds = [ProviderKind.claude, .codex, .gemini].filter { k in providers.contains { $0.kind == k } }
         VStack(alignment: .leading, spacing: 12) {
@@ -70,7 +71,7 @@ struct PreviewPanel: View {
                        worst: { k in providers.filter { $0.kind == k }.compactMap { $0.maxUsedPercent }.max() },
                        selection: .constant(kind))
             Divider()
-            KindDetailView(cards: providers.filter { $0.kind == kind }, history: syntheticHistory)
+            KindDetailView(cards: providers.filter { $0.kind == kind }, history: syntheticHistory, masked: masked)
             Divider()
             HStack {
                 Image(systemName: "checkmark.square.fill").foregroundStyle(.blue)
@@ -144,7 +145,11 @@ func generate() async {
     write(png(CostSection(cost: mockCost, budget: 100, expanded: true)
         .padding(12).frame(width: 320)
         .background(Color(nsColor: .windowBackgroundColor))), "cost-budget.png")
+    write(png(CostSection(cost: mockCost, masked: true, expanded: true)
+        .padding(12).frame(width: 320)
+        .background(Color(nsColor: .windowBackgroundColor))), "cost-masked.png")
     write(png(PreviewPanel(title: "downshift", providers: [downshiftCard()], kind: .claude)), "panel-downshift.png")
+    write(png(PreviewPanel(title: "privacy · masked", providers: mock, kind: .claude, masked: true)), "panel-masked.png")
 
     var cfg = UsageConfig.autoDetect()
     cfg.allowKeychain = false

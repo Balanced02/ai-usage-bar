@@ -112,6 +112,12 @@ All usage is read from local files and your existing Keychain credentials. The a
 network calls except Claude's own usage endpoints, using your own token — the exact requests
 Claude Code already makes. Nothing is uploaded, logged remotely, or shared.
 
+**Screen-sharing?** Flip **Mask account details** (gear menu) to hide emails (`y•••@•••`, domain
+removed) and repo names (`Project 1`, `Project 2`) so a demo doesn't reveal where you work. It's
+persisted, so it stays on until you turn it off.
+
+<p align="center"><img src="docs/masked.png" width="300" alt="masked account details"></p>
+
 ## Developer tools
 
 ```bash
