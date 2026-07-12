@@ -8,10 +8,14 @@ public struct KindDetailView: View {
     public let cards: [ProviderUsage]
     /// Optional 24h sample lookup for sparklines.
     public var history: ((ProviderUsage, UsageWindow) -> [Double])?
+    public var budget: Double
 
-    public init(cards: [ProviderUsage], history: ((ProviderUsage, UsageWindow) -> [Double])? = nil) {
+    public init(cards: [ProviderUsage],
+                history: ((ProviderUsage, UsageWindow) -> [Double])? = nil,
+                budget: Double = 0) {
         self.cards = cards
         self.history = history
+        self.budget = budget
     }
 
     public var body: some View {
@@ -23,7 +27,8 @@ public struct KindDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                     AccountBlock(usage: card, accent: Theme.accountColor(index),
-                                 history: history.map { lookup in { window in lookup(card, window) } })
+                                 history: history.map { lookup in { window in lookup(card, window) } },
+                                 budget: budget)
                 }
             }
         }
@@ -76,6 +81,7 @@ struct AccountBlock: View {
     let usage: ProviderUsage
     let accent: Color
     var history: ((UsageWindow) -> [Double])? = nil
+    var budget: Double = 0
 
     private var accountName: String {
         usage.displayName.components(separatedBy: " — ").last ?? usage.displayName
@@ -106,13 +112,48 @@ struct AccountBlock: View {
                 }
             }
 
+            if let hint = downshiftHint {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.down.circle.fill").font(.caption2).foregroundStyle(.orange)
+                    Text(hint).font(.caption2).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color.orange.opacity(0.10)))
+            }
             if let cost = usage.cost, cost.totalTokens > 0 {
-                CostSection(cost: cost)
+                CostSection(cost: cost, budget: budget)
             }
             if let note = footnote {
                 Text(note).font(.caption2).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// "Opus is 72% of spend · 7D Opus 90% — Sonnet has 53% left, try /model sonnet".
+    /// Only when the top-spend premium model's weekly window is high and a cheaper
+    /// model still has headroom.
+    private var downshiftHint: String? {
+        guard usage.kind == .claude, let cost = usage.cost, let top = cost.byModel.first else { return nil }
+        let total = cost.byModel.reduce(0) { $0 + $1.usd }
+        guard total > 0 else { return nil }
+        let share = top.usd / total
+        let rank = ["fable": 0, "haiku": 1, "sonnet": 2, "opus": 3]
+        guard let topRank = rank[top.model.lowercased()], topRank >= 2, share >= 0.5 else { return nil }
+
+        func window(_ model: String) -> Double? {
+            usage.windows.first { ($0.name ?? "").lowercased().contains(model.lowercased()) }?.usedPercent
+        }
+        guard let topPct = window(top.model), topPct >= 70 else { return nil }
+
+        // Prefer the next-cheaper model that still has room.
+        for cheaper in ["sonnet", "haiku"] where (rank[cheaper] ?? 0) < topRank {
+            if let p = window(cheaper), p < 50 {
+                return "\(top.model) is \(Int((share * 100).rounded()))% of spend · 7D \(top.model.uppercased()) \(Int(topPct.rounded()))% — \(cheaper.capitalized) has \(Int(100 - p))% left, try /model \(cheaper)"
+            }
+        }
+        return nil
     }
 
     private var header: some View {

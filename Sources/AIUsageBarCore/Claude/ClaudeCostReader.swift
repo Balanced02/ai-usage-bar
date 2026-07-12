@@ -12,12 +12,14 @@ public enum ClaudeCostReader {
         guard FileManager.default.fileExists(atPath: projects.path) else { return nil }
 
         let cutoff30 = now.addingTimeInterval(-30 * 24 * 3600)
-        let startOfToday = Calendar.current.startOfDay(for: now)
+        let cal = Calendar.current
+        let startOfToday = cal.startOfDay(for: now)
+        let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? startOfToday
         let files = ClaudeJSONLReader.recentJSONL(in: projects, modifiedAfter: cutoff30, limit: maxFiles)
 
         var seen = Set<String>()
         var totalTokens = 0
-        var todayUSD = 0.0, monthUSD = 0.0
+        var todayUSD = 0.0, monthUSD = 0.0, monthToDateUSD = 0.0
         var byModel: [String: (tokens: Int, usd: Double)] = [:]
         var byRepo: [String: (tokens: Int, usd: Double)] = [:]
         var rawInput = 0, cacheCreation = 0, cacheRead = 0
@@ -49,6 +51,7 @@ public enum ClaudeCostReader {
 
                 totalTokens += toks
                 monthUSD += usd
+                if ts >= startOfMonth { monthToDateUSD += usd }
                 if ts >= startOfToday { todayUSD += usd }
 
                 let mk = shortModel(model)
@@ -69,6 +72,7 @@ public enum ClaudeCostReader {
         return CostSummary(
             todayUSD: todayUSD,
             monthUSD: monthUSD,
+            monthToDateUSD: monthToDateUSD,
             totalTokens: totalTokens,
             byModel: byModel.map { ModelCost(model: $0.key, tokens: $0.value.tokens, usd: $0.value.usd) }
                 .sorted { $0.usd > $1.usd },

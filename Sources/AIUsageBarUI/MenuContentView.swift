@@ -16,7 +16,8 @@ public struct MenuContentView: View {
                 KindTabBar(kinds: model.kinds, worst: model.worstPercent(for:), selection: $model.selectedKind)
                 Divider()
                 KindDetailView(cards: model.cards(for: model.selectedKind),
-                               history: { card, window in model.sparkline(card.id, window) })
+                               history: { card, window in model.sparkline(card.id, window) },
+                               budget: model.monthlyBudgetUSD)
             }
 
             Divider()
@@ -87,6 +88,17 @@ public struct MenuContentView: View {
                         ForEach(MenuBarStyle.allCases, id: \.self) { style in
                             Text(style.label).tag(style)
                         }
+                    }
+                    .pickerStyle(.inline)
+                }
+                Section("Monthly budget") {
+                    Picker("Budget", selection: $model.monthlyBudgetUSD) {
+                        Text("Off").tag(0.0)
+                        Text("$50").tag(50.0)
+                        Text("$100").tag(100.0)
+                        Text("$250").tag(250.0)
+                        Text("$500").tag(500.0)
+                        Text("$1000").tag(1000.0)
                     }
                     .pickerStyle(.inline)
                 }

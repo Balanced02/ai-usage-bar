@@ -16,6 +16,28 @@ func png(_ view: some View, scale: CGFloat = 2) -> Data? {
     return rep.representation(using: .png, properties: [:])
 }
 
+func win(_ kind: WindowKind, _ pct: Double, _ mins: Int, _ inHours: Double, _ name: String? = nil) -> UsageWindow {
+    UsageWindow(kind: kind, usedPercent: pct, windowMinutes: mins,
+                resetsAt: Date().addingTimeInterval(inHours * 3600), name: name)
+}
+
+// A Claude account whose Opus weekly window is high while Sonnet has room — trips
+// the downshift nudge.
+func downshiftCard() -> ProviderUsage {
+    ProviderUsage(id: "claude:personal", kind: .claude, displayName: "Claude — Personal",
+                  accountLabel: "you@example.com", planType: "Max",
+                  windows: [win(.fiveHour, 20, 300, 3), win(.weekly, 60, 10080, 100),
+                            win(.weekly, 90, 10080, 100, "7D OPUS"),
+                            win(.weekly, 20, 10080, 100, "7D SONNET")],
+                  cost: CostSummary(todayUSD: 5, monthUSD: 200, monthToDateUSD: 130, totalTokens: 30_000_000,
+                                    byModel: [ModelCost(model: "Opus", tokens: 24_000_000, usd: 180),
+                                              ModelCost(model: "Sonnet", tokens: 6_000_000, usd: 20)],
+                                    byRepo: [RepoCost(repo: "api-server", tokens: 20_000_000, usd: 140),
+                                             RepoCost(repo: "web-app", tokens: 10_000_000, usd: 60)],
+                                    cacheHitRatio: 0.80, cacheSavedUSD: 30),
+                  status: .ok, lastUpdated: Date())
+}
+
 // Synthetic 24h series so sparklines show in the static previews.
 func syntheticHistory(_ card: ProviderUsage, _ window: UsageWindow) -> [Double] {
     let p = window.usedPercent ?? 0
@@ -65,7 +87,7 @@ struct PreviewPanel: View {
 }
 
 let mockCost = CostSummary(
-    todayUSD: 3.42, monthUSD: 128.5, totalTokens: 22_700_000,
+    todayUSD: 3.42, monthUSD: 128.5, monthToDateUSD: 84.0, totalTokens: 22_700_000,
     byModel: [ModelCost(model: "Opus", tokens: 14_000_000, usd: 92),
               ModelCost(model: "Sonnet", tokens: 7_000_000, usd: 30.5),
               ModelCost(model: "Haiku", tokens: 1_700_000, usd: 6)],
@@ -119,6 +141,10 @@ func generate() async {
     write(png(CostSection(cost: mockCost, expanded: true)
         .padding(12).frame(width: 320)
         .background(Color(nsColor: .windowBackgroundColor))), "cost-expanded.png")
+    write(png(CostSection(cost: mockCost, budget: 100, expanded: true)
+        .padding(12).frame(width: 320)
+        .background(Color(nsColor: .windowBackgroundColor))), "cost-budget.png")
+    write(png(PreviewPanel(title: "downshift", providers: [downshiftCard()], kind: .claude)), "panel-downshift.png")
 
     var cfg = UsageConfig.autoDetect()
     cfg.allowKeychain = false
