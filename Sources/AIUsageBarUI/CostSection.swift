@@ -5,10 +5,12 @@ import AIUsageBarCore
 /// tokens" that expands to model-mix, per-repo breakdown, and cache-efficiency.
 public struct CostSection: View {
     let cost: CostSummary
+    let budget: Double
     @State private var expanded: Bool
 
-    public init(cost: CostSummary, expanded: Bool = false) {
+    public init(cost: CostSummary, budget: Double = 0, expanded: Bool = false) {
         self.cost = cost
+        self.budget = budget
         self._expanded = State(initialValue: expanded)
     }
 
@@ -36,7 +38,39 @@ public struct CostSection: View {
                     Text("Cache \(Int((hit * 100).rounded()))% hit · saved \(Theme.usd(cost.cacheSavedUSD))")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
+                forecast
             }
+        }
+    }
+
+    // MARK: Forecast / budget
+
+    private var projectedMonthEnd: Double {
+        let cal = Calendar.current
+        let now = Date()
+        let day = cal.component(.day, from: now)
+        let daysInMonth = cal.range(of: .day, in: .month, for: now)?.count ?? 30
+        guard day > 0 else { return cost.monthToDateUSD }
+        return cost.monthToDateUSD / Double(day) * Double(daysInMonth)
+    }
+
+    @ViewBuilder private var forecast: some View {
+        let projected = projectedMonthEnd
+        let over = budget > 0 && projected > budget
+        VStack(alignment: .leading, spacing: 4) {
+            if budget > 0 {
+                HStack {
+                    Text("Budget").font(.caption2).foregroundStyle(.tertiary)
+                    Spacer()
+                    Text("\(Theme.usd(cost.monthToDateUSD)) / \(Theme.usd(budget))")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                MeterBar(percent: min(100, cost.monthToDateUSD / budget * 100), height: 6,
+                         color: over ? .red : .green)
+            }
+            Text("Projected \(Theme.usd(projected)) by month-end" + (over ? " · over budget" : ""))
+                .font(.caption2)
+                .foregroundStyle(over ? .orange : .secondary)
         }
     }
 

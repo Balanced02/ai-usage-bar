@@ -44,7 +44,10 @@ accounts at a glance. Everything is read locally; nothing leaves your machine.
   actually projected to hit the limit before it resets.
 - **Notifications** — native alerts when a window crosses 75% / 90%, is burning too fast, or clears.
 - **Cost & analytics** — an equivalent-$ breakdown per account: today / 30-day, **by model**,
-  **by project**, and cache-hit efficiency — computed from your local logs (see below).
+  **by project**, cache-hit efficiency, a **month-end forecast**, and an optional **budget gauge** —
+  all computed from your local logs (see below).
+- **Model-downshift nudge** — when your priciest model is eating its weekly limit and a cheaper one
+  has room: *"Opus is 90% of spend · 7D Opus 90% — Sonnet has 80% left, try /model sonnet"*.
 - **Best-account hint** — "Use Work — 88% free" when you have multiple profiles, so you don't
   burn the wrong account before a big task.
 - **Trends** — an inline sparkline of each window's recent history (on-disk timeseries).
@@ -57,8 +60,11 @@ accounts at a glance. Everything is read locally; nothing leaves your machine.
 Threshold colors: green `< 50` · yellow `< 75` · orange `< 90` · red. Bars use each account's
 color for grouping and escalate to orange/red near the limit.
 
-<p align="center"><img src="docs/cost.png" width="330" alt="cost & analytics breakdown"></p>
-<p align="center"><sub>Expand any account's cost line for model mix, per-project spend, and cache efficiency.</sub></p>
+<p align="center">
+  <img src="docs/cost.png" width="330" valign="top" alt="cost & analytics breakdown">
+  <img src="docs/downshift.png" width="250" valign="top" alt="model-downshift nudge">
+</p>
+<p align="center"><sub>Left: expand any account's cost line for model mix, per-project spend, cache efficiency, forecast &amp; budget. Right: the downshift nudge when a pricey model is eating its weekly limit.</sub></p>
 
 ## How it reads usage
 

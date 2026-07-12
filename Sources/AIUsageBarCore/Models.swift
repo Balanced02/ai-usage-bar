@@ -131,18 +131,20 @@ public struct RepoCost: Codable, Sendable, Hashable {
 /// plan this is an *equivalent API cost*, useful for attribution and mix.
 public struct CostSummary: Codable, Sendable, Hashable {
     public var todayUSD: Double
-    public var monthUSD: Double
+    public var monthUSD: Double            // rolling last 30 days
+    public var monthToDateUSD: Double      // since the 1st of this calendar month
     public var totalTokens: Int
     public var byModel: [ModelCost]
     public var byRepo: [RepoCost]
-    public var cacheHitRatio: Double?   // 0–1
+    public var cacheHitRatio: Double?      // 0–1
     public var cacheSavedUSD: Double
 
-    public init(todayUSD: Double, monthUSD: Double, totalTokens: Int,
+    public init(todayUSD: Double, monthUSD: Double, monthToDateUSD: Double, totalTokens: Int,
                 byModel: [ModelCost], byRepo: [RepoCost],
                 cacheHitRatio: Double?, cacheSavedUSD: Double) {
         self.todayUSD = todayUSD
         self.monthUSD = monthUSD
+        self.monthToDateUSD = monthToDateUSD
         self.totalTokens = totalTokens
         self.byModel = byModel
         self.byRepo = byRepo
