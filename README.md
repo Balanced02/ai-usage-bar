@@ -10,6 +10,12 @@ A tiny, native macOS menu-bar app that shows your **Claude**, **Codex**, and **G
 usage — 5-hour and weekly windows, reset timers, burn-rate warnings — for multiple
 accounts at a glance. Everything is read locally; nothing leaves your machine.
 
+<p>
+  <a href="https://github.com/Balanced02/ai-usage-bar/actions/workflows/ci.yml"><img src="https://github.com/Balanced02/ai-usage-bar/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-blue" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
+</p>
+
 <img src="docs/menubar-text.png" height="26" alt="menu bar text style">
 &nbsp;&nbsp;or&nbsp;&nbsp;
 <img src="docs/menubar-meters.png" height="26" alt="menu bar meter style">
@@ -58,9 +64,12 @@ Everything is local — no proxy, no telemetry, no account of ours.
 Claude profiles are **auto-discovered** by parsing `CLAUDE_CONFIG_DIR=…` out of your shell rc
 files, so a `claude-work` alias just works. See [DESIGN.md](DESIGN.md) for the full write-up.
 
-## Install & build
+## Install
 
-Requires macOS 14+ and Xcode / Swift 6.
+**Download:** grab the latest `.app` from [Releases](https://github.com/Balanced02/ai-usage-bar/releases).
+It's ad-hoc signed, so on first launch right-click the app → **Open** (or `xattr -dr com.apple.quarantine AIUsageBar.app`), then move it to `/Applications`.
+
+**Build from source** (macOS 14+, Xcode / Swift 6):
 
 ```bash
 git clone https://github.com/Balanced02/ai-usage-bar.git
