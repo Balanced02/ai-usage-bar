@@ -46,6 +46,25 @@ public enum Theme {
         return "\(m)m"
     }
 
+    /// Compact USD, e.g. "$254", "$12.3", "$0.04".
+    public static func usd(_ v: Double) -> String {
+        if v >= 100 { return "$\(Int(v.rounded()))" }
+        if v >= 10 { return String(format: "$%.1f", v) }
+        if v > 0 { return String(format: "$%.2f", v) }
+        return "$0"
+    }
+
+    /// Per-model color for the mix bar / legend.
+    public static func modelColor(_ name: String) -> Color {
+        switch name.lowercased() {
+        case "opus": return Color(red: 0.55, green: 0.35, blue: 0.85)   // purple
+        case "sonnet": return Color(red: 0.20, green: 0.47, blue: 0.96) // blue
+        case "haiku": return Color(red: 0.10, green: 0.65, blue: 0.55)  // teal
+        case "fable": return Color(red: 0.90, green: 0.49, blue: 0.13)  // orange
+        default: return .gray
+        }
+    }
+
     /// Compact token count, e.g. "1.2M", "45k".
     public static func compactTokens(_ n: Int?) -> String? {
         guard let n, n > 0 else { return nil }

@@ -53,11 +53,16 @@ public struct ClaudeReader: Sendable {
         let plan = account?.planLabel
         let id = "claude:\(profile.name.lowercased())"
 
+        // Parse the (potentially large) JSONL cost breakdown off the actor.
+        let cost = await Task.detached(priority: .utility) {
+            ClaudeCostReader.summary(for: profile)
+        }.value
+
         func base(status: UsageStatus, windows: [UsageWindow] = [], tokens: TokenStats? = nil,
                   detail: String? = nil, updated: Date? = nil) -> ProviderUsage {
             ProviderUsage(id: id, kind: .claude, displayName: "Claude — \(profile.name)",
                           accountLabel: label, planType: plan, windows: windows, tokens: tokens,
-                          status: status, detail: detail, lastUpdated: updated,
+                          cost: cost, status: status, detail: detail, lastUpdated: updated,
                           sourcePath: profile.configDir.path)
         }
 

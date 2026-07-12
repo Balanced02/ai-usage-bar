@@ -64,6 +64,16 @@ struct PreviewPanel: View {
     }
 }
 
+let mockCost = CostSummary(
+    todayUSD: 3.42, monthUSD: 128.5, totalTokens: 22_700_000,
+    byModel: [ModelCost(model: "Opus", tokens: 14_000_000, usd: 92),
+              ModelCost(model: "Sonnet", tokens: 7_000_000, usd: 30.5),
+              ModelCost(model: "Haiku", tokens: 1_700_000, usd: 6)],
+    byRepo: [RepoCost(repo: "api-server", tokens: 12_000_000, usd: 78),
+             RepoCost(repo: "web-app", tokens: 6_000_000, usd: 32),
+             RepoCost(repo: "infra", tokens: 4_700_000, usd: 18.5)],
+    cacheHitRatio: 0.84, cacheSavedUSD: 22.3)
+
 func mockProviders() -> [ProviderUsage] {
     func w(_ kind: WindowKind, _ pct: Double, _ mins: Int, _ inHours: Double, name: String? = nil) -> UsageWindow {
         UsageWindow(kind: kind, usedPercent: pct, windowMinutes: mins,
@@ -78,12 +88,12 @@ func mockProviders() -> [ProviderUsage] {
                       accountLabel: "you@example.com", planType: "Max",
                       windows: [w(.fiveHour, 2, 300, 4.6), w(.weekly, 23, 10080, 110),
                                 w(.weekly, 9, 10080, 110, name: "7D FABLE")],
-                      status: .ok, lastUpdated: Date()),
+                      cost: mockCost, status: .ok, lastUpdated: Date()),
         ProviderUsage(id: "claude:work", kind: .claude, displayName: "Claude — Work",
                       accountLabel: "work@example.com", planType: "Team",
                       windows: [w(.fiveHour, 18, 300, 4.6), w(.weekly, 29, 10080, 130),
                                 w(.weekly, 53, 10080, 130, name: "7D FABLE")],
-                      status: .ok, lastUpdated: Date()),
+                      cost: mockCost, status: .ok, lastUpdated: Date()),
         ProviderUsage(id: "gemini", kind: .gemini, displayName: "Gemini",
                       status: .notInstalled, detail: "Not detected — install gemini-cli"),
     ]
@@ -106,6 +116,9 @@ func generate() async {
     write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .claude)), "panel-mock.png")
     write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .codex)), "panel-mock-codex.png")
     write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .gemini)), "panel-mock-gemini.png")
+    write(png(CostSection(cost: mockCost, expanded: true)
+        .padding(12).frame(width: 320)
+        .background(Color(nsColor: .windowBackgroundColor))), "cost-expanded.png")
 
     var cfg = UsageConfig.autoDetect()
     cfg.allowKeychain = false

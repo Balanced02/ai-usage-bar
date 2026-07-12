@@ -60,7 +60,7 @@ public enum ClaudeJSONLReader {
         return ClaudeTokenActivity(fiveHourTokens: fiveH, sevenDayTokens: sevenD, lastActivity: last)
     }
 
-    private static func recentJSONL(in dir: URL, modifiedAfter: Date, limit: Int) -> [URL] {
+    static func recentJSONL(in dir: URL, modifiedAfter: Date, limit: Int) -> [URL] {
         let fm = FileManager.default
         guard let en = fm.enumerator(at: dir,
                                      includingPropertiesForKeys: [.contentModificationDateKey],

@@ -146,6 +146,37 @@ final class CoreTests: XCTestCase {
         try? fm.removeItem(at: dir)
     }
 
+    func testPricingCost() {
+        // Opus: 1000 in ×$15 + 500 out ×$75 + 2000 cache-read ×$1.50, per 1M.
+        let usd = Pricing.cost(model: "claude-opus-4-8", input: 1000, output: 500, cacheCreation: 0, cacheRead: 2000)
+        XCTAssertEqual(usd, (15000 + 37500 + 3000) / 1_000_000, accuracy: 1e-9)
+    }
+
+    func testClaudeCostReaderAggregatesAndDedupes() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("cost-\(UUID().uuidString)")
+        let projects = home.appendingPathComponent("projects/slug")
+        try fm.createDirectory(at: projects, withIntermediateDirectories: true)
+
+        let recent = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
+        func line(_ rid: String, _ model: String, _ cwd: String, _ i: Int, _ o: Int, _ cc: Int, _ cr: Int) -> String {
+            "{\"type\":\"assistant\",\"timestamp\":\"\(recent)\",\"requestId\":\"\(rid)\",\"cwd\":\"\(cwd)\",\"message\":{\"id\":\"m\(rid)\",\"model\":\"\(model)\",\"usage\":{\"input_tokens\":\(i),\"output_tokens\":\(o),\"cache_creation_input_tokens\":\(cc),\"cache_read_input_tokens\":\(cr)}}}"
+        }
+        let opus = line("1", "claude-opus-4-8", "/Users/x/api-server", 1000, 500, 0, 2000)
+        let sonnet = line("2", "claude-sonnet-5", "/Users/x/web-app", 2000, 1000, 0, 0)
+        // opus repeated (same id/requestId) → must be deduped.
+        try (opus + "\n" + sonnet + "\n" + opus + "\n")
+            .write(to: projects.appendingPathComponent("s.jsonl"), atomically: true, encoding: .utf8)
+
+        let cost = try XCTUnwrap(ClaudeCostReader.summary(for: .custom(name: "Test", dir: home.path)))
+        XCTAssertEqual(cost.monthUSD, 0.0555 + 0.021, accuracy: 1e-6)   // opus + sonnet
+        XCTAssertEqual(cost.totalTokens, 3500 + 3000)                    // opus counted once
+        XCTAssertEqual(cost.byModel.first?.model, "Opus")               // sorted by $ desc
+        XCTAssertEqual(Set(cost.byRepo.map(\.repo)), ["api-server", "web-app"])
+
+        try? fm.removeItem(at: home)
+    }
+
     // Builds a token_count rollout line like the ones Codex writes.
     private func tokenCountLine(ts: String, p5h: Double, wk: Double, credits: String?, plan: String) -> String {
         let creditsJSON = credits.map { #"{"has_credits":true,"unlimited":false,"balance":"\#($0)"}"# } ?? "null"

@@ -104,9 +104,13 @@ struct AccountBlock: View {
                 VStack(spacing: 12) {
                     ForEach(usage.windows) { WindowRow(window: $0, accent: accent, samples: history?($0) ?? []) }
                 }
-                if let note = footnote {
-                    Text(note).font(.caption2).foregroundStyle(.secondary)
-                }
+            }
+
+            if let cost = usage.cost, cost.totalTokens > 0 {
+                CostSection(cost: cost)
+            }
+            if let note = footnote {
+                Text(note).font(.caption2).foregroundStyle(.secondary)
             }
         }
     }
@@ -166,8 +170,9 @@ struct AccountBlock: View {
     private var footnote: String? {
         var parts: [String] = []
         if let c = usage.credits, let b = c.balance, b != "0" { parts.append("Credits: \(b)") }
-        if let t = Theme.compactTokens(usage.tokens?.totalTokens) {
-            parts.append(usage.kind == .codex ? "\(t) session tokens" : "\(t) tokens")
+        // Codex token total; Claude tokens are shown in the cost section instead.
+        if usage.kind == .codex, let t = Theme.compactTokens(usage.tokens?.totalTokens) {
+            parts.append("\(t) session tokens")
         }
         return parts.isEmpty ? nil : parts.joined(separator: "   ")
     }

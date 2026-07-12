@@ -42,14 +42,23 @@ accounts at a glance. Everything is read locally; nothing leaves your machine.
   you are, so you can see at a glance if you're burning fast.
 - **Burn-rate warnings** — `⚡ on pace to run out in 1h 3m` appears only when a window is
   actually projected to hit the limit before it resets.
-- **Notifications** — native alerts when a window crosses 75% / 90% or is burning too fast.
-- **Two menu-bar styles** — compact text (`Cx 2%  Cl 61%`) or CodexBar-style dual-bar meters.
-- **Click-through** to each provider's usage dashboard, a stale-data badge when an endpoint is
-  failing, and a sign-in helper for profiles that aren't authenticated yet.
+- **Notifications** — native alerts when a window crosses 75% / 90%, is burning too fast, or clears.
+- **Cost & analytics** — an equivalent-$ breakdown per account: today / 30-day, **by model**,
+  **by project**, and cache-hit efficiency — computed from your local logs (see below).
+- **Best-account hint** — "Use Work — 88% free" when you have multiple profiles, so you don't
+  burn the wrong account before a big task.
+- **Trends** — an inline sparkline of each window's recent history (on-disk timeseries).
+- **Four menu-bar styles** — text (`Cx 2%  Cl 61%`), dual-bar meters, single number, or a dot.
+  Right-click the icon for a quick menu (peek, copy snapshot, dashboards).
+- **Click-through** to each provider's dashboard, a stale-data badge when an endpoint is failing,
+  and a sign-in helper for profiles that aren't authenticated yet.
 - **Native & tiny** — SwiftUI + AppKit, no Dock icon, launch-at-login, ~15 MB.
 
 Threshold colors: green `< 50` · yellow `< 75` · orange `< 90` · red. Bars use each account's
 color for grouping and escalate to orange/red near the limit.
+
+<p align="center"><img src="docs/cost.png" width="330" alt="cost & analytics breakdown"></p>
+<p align="center"><sub>Expand any account's cost line for model mix, per-project spend, and cache efficiency.</sub></p>
 
 ## How it reads usage
 
