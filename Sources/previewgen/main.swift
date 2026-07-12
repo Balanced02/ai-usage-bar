@@ -89,8 +89,9 @@ func generate() async {
     }
 
     let mock = mockProviders()
-    write(png(PreviewPanel(title: "mock", providers: mock, kind: .claude)), "panel-mock.png")
-    write(png(PreviewPanel(title: "mock", providers: mock, kind: .codex)), "panel-mock-codex.png")
+    write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .claude)), "panel-mock.png")
+    write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .codex)), "panel-mock-codex.png")
+    write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .gemini)), "panel-mock-gemini.png")
 
     var cfg = UsageConfig.autoDetect()
     cfg.allowKeychain = false
