@@ -10,6 +10,8 @@ public final class UsageNotifier {
     public var enabled = true
 
     private var notified = Set<String>()
+    private var throttled = Set<String>()
+    private var clearCounter = 0
     private var primed = false
     private var authorized = false
 
@@ -27,10 +29,26 @@ public final class UsageNotifier {
 
     public func evaluate(_ providers: [ProviderUsage]) {
         guard enabled, available else { return }
+
+        // Threshold + burn-rate crossings.
         for alert in collect(providers) where !notified.contains(alert.key) {
             notified.insert(alert.key)
-            if primed { post(alert) }     // don't fire on the seeding pass
+            if primed { send(id: alert.key, title: alert.title, body: alert.body) }
         }
+
+        // "You're back" — a provider that was throttled/maxed just cleared.
+        for p in providers {
+            let limited = p.isThrottled || p.windows.contains { ($0.usedPercent ?? 0) >= 98 }
+            if limited {
+                throttled.insert(p.id)
+            } else if throttled.remove(p.id) != nil, primed {
+                send(id: "\(p.id)|cleared|\(clearCounter)",
+                     title: "\(p.displayName) is back",
+                     body: "A limit just reset — you're clear.")
+                clearCounter += 1
+            }
+        }
+
         primed = true
     }
 
@@ -60,12 +78,12 @@ public final class UsageNotifier {
         return out
     }
 
-    private func post(_ alert: Alert) {
+    private func send(id: String, title: String, body: String) {
         let content = UNMutableNotificationContent()
-        content.title = alert.title
-        content.body = alert.body
+        content.title = title
+        content.body = body
         content.sound = .default
-        let request = UNNotificationRequest(identifier: alert.key, content: content, trigger: nil)
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
 

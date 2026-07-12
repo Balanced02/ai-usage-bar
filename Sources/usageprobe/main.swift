@@ -52,6 +52,17 @@ case "all":
     let service = UsageService(config: .autoDetect())
     let results = await service.refresh()
     print(results.map(fmt).joined(separator: "\n\n"))
+case "statusline":
+    // One compact line for a shell prompt / Claude Code statusLine.
+    let results = await UsageService(config: .autoDetect()).refresh()
+    var parts: [String] = []
+    for kind in [ProviderKind.codex, .claude, .gemini] {
+        let pct = results.filter { $0.kind == kind }.compactMap { $0.maxUsedPercent }.max()
+        guard let p = pct else { continue }
+        let code = kind == .codex ? "Cx" : (kind == .claude ? "Cl" : "Gm")
+        parts.append("\(code) \(Int(p.rounded()))%")
+    }
+    print(parts.isEmpty ? "AI usage: n/a" : parts.joined(separator: " · "))
 default:
     print("usage: usageprobe [codex|claude|gemini|all]")
 }

@@ -51,6 +51,29 @@ public struct MenuBarMetersView: View {
     }
 }
 
+/// Single worst-percentage number, colored by threshold.
+public struct MenuBarNumberView: View {
+    public let percent: Double?
+    public init(percent: Double?) { self.percent = percent }
+    public var body: some View {
+        Text(percent.map { "\(Int($0.rounded()))%" } ?? "AI")
+            .font(.system(size: 12, weight: .bold)).monospacedDigit()
+            .foregroundStyle(Theme.color(forPercent: percent))
+            .padding(.horizontal, 3).frame(height: 18).fixedSize()
+    }
+}
+
+/// Single traffic-light dot, colored by worst threshold.
+public struct MenuBarDotView: View {
+    public let percent: Double?
+    public init(percent: Double?) { self.percent = percent }
+    public var body: some View {
+        Circle().fill(Theme.color(forPercent: percent))
+            .frame(width: 10, height: 10)
+            .padding(.horizontal, 4).frame(height: 18).fixedSize()
+    }
+}
+
 private struct MiniBar: View {
     let percent: Double?
     private let width: CGFloat = 18

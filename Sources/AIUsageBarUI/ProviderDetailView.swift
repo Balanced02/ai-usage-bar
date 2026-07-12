@@ -9,12 +9,58 @@ public struct KindDetailView: View {
     public init(cards: [ProviderUsage]) { self.cards = cards }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                AccountBlock(usage: card, accent: Theme.accountColor(index))
+        VStack(alignment: .leading, spacing: 14) {
+            if let rec = recommendation {
+                RecommendationBanner(name: rec.name, accent: rec.accent,
+                                     headroom: rec.headroom, tightest: rec.tightest)
+            }
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                    AccountBlock(usage: card, accent: Theme.accountColor(index))
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Best account to use right now: the one whose tightest window has the most
+    /// headroom. Only shown when 2+ accounts of the same kind have live windows.
+    private var recommendation: (name: String, accent: Color, headroom: Double, tightest: String)? {
+        guard cards.count >= 2 else { return nil }
+        let ranked = cards.enumerated()
+            .filter { $0.element.maxUsedPercent != nil }
+            .map { (index: $0.offset, card: $0.element, headroom: 100 - ($0.element.maxUsedPercent ?? 100)) }
+            .sorted { $0.headroom > $1.headroom }
+        guard ranked.count >= 2, let best = ranked.first else { return nil }
+        // Don't bother if they're basically tied.
+        guard best.headroom - ranked[1].headroom >= 3 else { return nil }
+        let name = best.card.displayName.components(separatedBy: " — ").last ?? best.card.displayName
+        let tight = best.card.windows.max { ($0.usedPercent ?? 0) < ($1.usedPercent ?? 0) }
+        let tightStr = tight.map { "\($0.name ?? $0.kind.shortLabel) \(Int(($0.usedPercent ?? 0).rounded()))%" } ?? ""
+        return (name, Theme.accountColor(best.index), best.headroom, tightStr)
+    }
+}
+
+/// "Use Work — 88% free" hint above the account list.
+struct RecommendationBanner: View {
+    let name: String
+    let accent: Color
+    let headroom: Double
+    let tightest: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "lightbulb.fill").font(.caption2).foregroundStyle(.yellow)
+            Text("Use \(name)").font(.caption).fontWeight(.semibold)
+            Text("· \(Int(headroom.rounded()))% free").font(.caption).foregroundStyle(.secondary)
+            Spacer(minLength: 6)
+            if !tightest.isEmpty {
+                Text("tightest \(tightest)").font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(accent.opacity(0.12)))
     }
 }
 
