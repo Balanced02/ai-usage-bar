@@ -16,18 +16,22 @@ multi-tool, multi-profile setup.
 ## Tech stack (decided)
 
 - **Swift 6 + SwiftUI**, Swift Package Manager, target **macOS 14+** (built on 27).
-- Menu bar via **`MenuBarExtra` + `.menuBarExtraStyle(.window)`**.
+- Menu bar via **`NSStatusItem` + `NSPopover`**, with a lazily created AppKit settings
+  window. This avoids a Dock icon and prevents Settings from reopening on app launch.
 - The menu-bar **label is a rendered `NSImage`** (SwiftUI `ImageRenderer`, `isTemplate=false`)
   so colored percentage/meter survives the system's monochrome tinting — the single most
-  common `MenuBarExtra` surprise.
-- **Non-sandboxed** + Hardened Runtime (sandbox blocks reading `~/.codex`, `~/.claude`,
+  common menu-bar-label surprise.
+- **Non-sandboxed**, ad-hoc signed local builds (sandbox blocks reading `~/.codex`, `~/.claude`,
   and other apps' Keychain items).
 - `LSUIElement = true` (agent, no Dock icon). Launch-at-login via `SMAppService.mainApp`.
 - **Timer poll** (default ~45s; Claude endpoint throttled to ≥180s). Optional FSEvents later.
 
 ## Data sources
 
-### Codex — `~/.codex/sessions/YYYY/MM/DD/rollout-<ISO>-<uuid>.jsonl`  (✅ high confidence)
+### Codex — configured-root `sessions/YYYY/MM/DD/rollout-<ISO>-<uuid>.jsonl`  (✅ high confidence)
+
+The settings window can override the configuration root. Without an override, Codex follows
+`$CODEX_HOME` and then `~/.codex`.
 
 Lines are JSON events. The ones we want:
 
@@ -86,11 +90,12 @@ First read by our (differently-signed) app triggers a one-time Keychain "Always 
 - Personal → `~/.claude`  (identity in `~/.claude.json` → `oauthAccount.emailAddress`)
 - Work → `~/.claude-work`  (`CLAUDE_CONFIG_DIR=~/.claude-work`; identity in `~/.claude-work/.claude.json`)
 
-Profiles are auto-discovered by parsing `CLAUDE_CONFIG_DIR=…` out of the shell rc files.
+Profiles are auto-discovered by parsing `CLAUDE_CONFIG_DIR=…` out of the shell rc files. Settings
+can also add named manual configuration directories; those supplement automatic discovery.
 
 Mapping Keychain item → profile: attempt to match each token's account against each profile's
-`.claude.json` `oauthAccount` (via the endpoint / token claims); otherwise let the user assign in
-Settings. Identity/plan/tier come from `.claude.json` (`organizationType`, `organizationRateLimitTier`).
+`.claude.json` `oauthAccount` (via the endpoint / token claims). Identity/plan/tier come from
+`.claude.json` (`organizationType`, `organizationRateLimitTier`).
 
 **Fallback ladder** (when the endpoint 429s / no token):
 1. PTY-scrape `CLAUDE_CONFIG_DIR=<dir> claude` → `/usage` (true %, routes through Claude Code's client, correct profile).
@@ -99,6 +104,8 @@ Settings. Identity/plan/tier come from `.claude.json` (`organizationType`, `orga
 4. "usage unavailable / sign in to Claude Code" + last cached value with timestamp.
 
 ### Gemini — best-effort  (⚠️ weakest)
+
+The configuration root can be selected in Settings and defaults to `~/.gemini`.
 
 No Codex-style quota file exists. State machine:
 - `gemini` not in PATH and no `~/.gemini` → **"Not detected — install gemini-cli"**.
@@ -123,11 +130,11 @@ AIUsageBarCore (library, pure Foundation + Security)
   GeminiReader.swift      detection state machine
   UsageService.swift      aggregate all providers, cache, refresh
 
-AIUsageBar (executable, SwiftUI app)
-  AIUsageBarApp.swift     @main, MenuBarExtra(.window), LSUIElement
-  MenuBarLabel.swift      ImageRenderer → NSImage compact label
-  MenuContentView.swift   dropdown: provider cards, windows, resets, refresh, settings
-  AppModel.swift          @Observable; owns UsageService + timer + settings
+AIUsageBar (executable, AppKit entry point)
+  AIUsageBarApp.swift     @main, NSStatusItem + NSPopover + SettingsWindowController, LSUIElement
+  MenuContentView.swift   dropdown: provider cards, windows, resets, refresh, gear → Settings
+  SettingsView.swift      draft-backed General, Providers, and Data locations form
+  AppModel.swift          @Observable; owns UsageService + timer + persisted settings
 
 usageprobe (executable)   CLI that prints parsed usage as JSON — used to verify readers
 Scripts/build-app.sh      build → assemble .app (LSUIElement) → ad-hoc sign → launch
@@ -139,8 +146,11 @@ Scripts/build-app.sh      build → assemble .app (LSUIElement) → ad-hoc sign 
 - Threshold color bands: green < 50 < yellow < 75 < orange < 90 < red.
 - Dropdown: one card per provider/profile → each window as a labeled progress bar with % and
   "resets in 3h 12m"; plan/tier + credits; token totals; per-source freshness + status.
-- Manual refresh, cadence picker, launch-at-login toggle, per-provider enable toggles.
-- Later: threshold notifications, history sparkline, burn-rate/time-to-limit projection (ccusage / Usage-Monitor style).
+- Manual refresh, cadence picker, launch-at-login toggle, per-provider enable toggles, native
+  notifications, history sparklines, and burn-rate/time-to-limit projection.
+- Settings is explicitly opened from the panel gear or right-click menu. Its draft can be
+  cancelled, and it owns refresh, privacy, budget, provider toggles, data roots, and automatic
+  plus named manual Claude configurations.
 
 ## Distribution
 
@@ -154,7 +164,7 @@ Scripts/build-app.sh      build → assemble .app (LSUIElement) → ad-hoc sign 
 
 ## Key risks / gotchas
 
-- `MenuBarExtra` plain-text labels lose color → render an image.
+- Plain-text menu-bar labels lose color → render an image.
 - Claude endpoint 429s without the exact `User-Agent`; cache hard, back off.
 - Keychain suffix isn't computable → enumerate; expect a one-time access prompt.
 - Codex windows aren't positional → classify by `window_minutes`. `resets_at` is **seconds**.

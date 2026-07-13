@@ -3,7 +3,7 @@ import AppKit
 import AIUsageBarCore
 import AIUsageBarUI
 
-// Renders the dropdown + menu-bar label to PNGs for design review.
+// Renders fixture-backed UI images to PNGs for README/design review.
 //   previewgen <outputDir>
 
 @MainActor
@@ -87,6 +87,281 @@ struct PreviewPanel: View {
     }
 }
 
+/// A fixture-only rendering of the two visible portions of `SettingsView`.
+///
+/// This deliberately does not construct `AppModel`: previews must not read
+/// UserDefaults, discover local configuration folders, or expose a developer's
+/// actual paths. Keep every string here as an example-only value.
+private struct SettingsPreviewFixture {
+    static let example = SettingsPreviewFixture(
+        refreshCadence: "5 minutes",
+        menuBarStyle: "Text (Cx 2%)",
+        monthlyBudget: "$250",
+        codexRoot: "/config/codex",
+        geminiRoot: "/config/gemini",
+        automaticClaudeName: "Personal",
+        automaticClaudeRoot: "/config/claude",
+        manualClaudeName: "Studio",
+        manualClaudeRoot: "/config/claude-studio"
+    )
+
+    let refreshCadence: String
+    let menuBarStyle: String
+    let monthlyBudget: String
+    let codexRoot: String
+    let geminiRoot: String
+    let automaticClaudeName: String
+    let automaticClaudeRoot: String
+    let manualClaudeName: String
+    let manualClaudeRoot: String
+}
+
+private struct SettingsPreview: View {
+    enum Page {
+        case general
+        case dataLocations
+    }
+
+    let page: Page
+    private let fixture = SettingsPreviewFixture.example
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            switch page {
+            case .general:
+                generalSection
+                providersSection
+            case .dataLocations:
+                dataLocationsSection
+            }
+        }
+        .padding(24)
+        .frame(width: 620, alignment: .leading)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var generalSection: some View {
+        settingsSection("General") {
+            settingsCard {
+                choiceRow(label: "Refresh cadence", value: fixture.refreshCadence)
+                rowDivider
+                choiceRow(label: "Menu bar style", value: fixture.menuBarStyle)
+                rowDivider
+                choiceRow(label: "Monthly budget", value: fixture.monthlyBudget)
+                rowDivider
+                toggleRow("Notifications")
+                rowDivider
+                toggleRow("Mask account details")
+                rowDivider
+                toggleRow("Launch at login")
+            }
+        }
+    }
+
+    private var providersSection: some View {
+        settingsSection("Providers") {
+            settingsCard {
+                toggleRow("Codex")
+                rowDivider
+                toggleRow("Claude")
+                rowDivider
+                toggleRow("Gemini")
+            }
+        }
+    }
+
+    private var dataLocationsSection: some View {
+        settingsSection("Data locations") {
+            settingsCard {
+                dataRootRow(label: "Codex data folder", path: fixture.codexRoot)
+                rowDivider
+                dataRootRow(label: "Gemini data folder", path: fixture.geminiRoot)
+                rowDivider
+                subsectionTitle("Automatic Claude profiles")
+                profileRow(name: fixture.automaticClaudeName,
+                           path: fixture.automaticClaudeRoot,
+                           defaultProfile: true)
+                trailingButton("Rescan")
+                rowDivider
+                subsectionTitle("Manual Claude profiles")
+                manualProfileRow(name: fixture.manualClaudeName, path: fixture.manualClaudeRoot)
+                trailingButton("Add profile")
+                footerButtons
+            }
+        }
+    }
+
+    private func dataRootRow(label: String, path: String) -> some View {
+        LabeledContent(label) {
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(path)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                HStack(spacing: 8) {
+                    fixtureButton("Choose folder")
+                    fixtureButton("Use automatic")
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private func profileRow(name: String, path: String, defaultProfile: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(name)
+                if defaultProfile {
+                    Text("Default")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(path)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func manualProfileRow(name: String, path: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text("Name")
+                    .foregroundStyle(.secondary)
+                Text(name)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color(nsColor: .textBackgroundColor))
+                    }
+            }
+            Text(path)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            HStack {
+                fixtureButton("Choose folder")
+                fixtureButton("Remove", destructive: true)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func settingsSection<Content: View>(_ title: String,
+                                                 @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            content()
+        }
+    }
+
+    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content()
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08))
+        }
+    }
+
+    private func choiceRow(label: String, value: String) -> some View {
+        HStack(spacing: 10) {
+            Text(label)
+            Spacer(minLength: 24)
+            Text(value)
+                .foregroundStyle(.secondary)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 36)
+    }
+
+    private func toggleRow(_ label: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            FixtureSwitch()
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 36)
+    }
+
+    private func subsectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+    }
+
+    private func trailingButton(_ title: String) -> some View {
+        HStack {
+            Spacer()
+            fixtureButton(title)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+
+    private var footerButtons: some View {
+        HStack(spacing: 8) {
+            Spacer()
+            fixtureButton("Cancel")
+            fixtureButton("Apply", primary: true)
+        }
+        .padding(12)
+    }
+
+    private var rowDivider: some View {
+        Divider()
+            .padding(.leading, 12)
+    }
+
+    private func fixtureButton(_ title: String, primary: Bool = false,
+                               destructive: Bool = false) -> some View {
+        Text(title)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(primary ? Color.white : destructive ? Color.red : Color.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(primary ? Color.accentColor : Color.primary.opacity(0.10))
+            }
+    }
+}
+
+private struct FixtureSwitch: View {
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Capsule()
+                .fill(Color.accentColor)
+            Circle()
+                .fill(.white)
+                .padding(2)
+        }
+        .frame(width: 32, height: 20)
+    }
+}
+
 let mockCost = CostSummary(
     todayUSD: 3.42, monthUSD: 128.5, monthToDateUSD: 84.0, totalTokens: 22_700_000,
     byModel: [ModelCost(model: "Opus", tokens: 14_000_000, usd: 92),
@@ -150,11 +425,8 @@ func generate() async {
         .background(Color(nsColor: .windowBackgroundColor))), "cost-masked.png")
     write(png(PreviewPanel(title: "downshift", providers: [downshiftCard()], kind: .claude)), "panel-downshift.png")
     write(png(PreviewPanel(title: "privacy · masked", providers: mock, kind: .claude, masked: true)), "panel-masked.png")
-
-    var cfg = UsageConfig.autoDetect()
-    cfg.allowKeychain = false
-    let real = await UsageService(config: cfg).refresh()
-    write(png(PreviewPanel(title: "live", providers: real, kind: .codex)), "panel-live.png")
+    write(png(SettingsPreview(page: .general)), "settings-general.png")
+    write(png(SettingsPreview(page: .dataLocations)), "settings-data-locations.png")
 
     let chips = [
         LabelChip(code: "Cx", percent: 72, throttled: false),

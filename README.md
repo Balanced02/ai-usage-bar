@@ -52,7 +52,7 @@ accounts at a glance. Everything is read locally; nothing leaves your machine.
   burn the wrong account before a big task.
 - **Trends** — an inline sparkline of each window's recent history (on-disk timeseries).
 - **Four menu-bar styles** — text (`Cx 2%  Cl 61%`), dual-bar meters, single number, or a dot.
-  Right-click the icon for a quick menu (peek, copy snapshot, dashboards).
+  Right-click the icon for a quick menu (peek, copy snapshot, dashboards, or **Settings…**).
 - **Click-through** to each provider's dashboard, a stale-data badge when an endpoint is failing,
   and a sign-in helper for profiles that aren't authenticated yet.
 - **Native & tiny** — SwiftUI + AppKit, no Dock icon, launch-at-login, ~15 MB.
@@ -72,9 +72,9 @@ Everything is local — no proxy, no telemetry, no account of ours.
 
 | Provider | Source | Fidelity |
 |---|---|---|
-| **Codex** | Newest `~/.codex/sessions/**/rollout-*.jsonl` `token_count` event — real 5h/weekly %, resets, plan, credits, tokens. Zero-auth. | ✅ Full |
+| **Codex** | Newest `token_count` event under the configured Codex root (defaults to `$CODEX_HOME`, then `~/.codex`) — real 5h/weekly %, resets, plan, credits, tokens. Zero-auth. | ✅ Full |
 | **Claude** | `GET api.anthropic.com/api/oauth/usage` per profile (OAuth token from the Keychain, account matched via `/api/oauth/profile`). Falls back to local token-activity if the endpoint is unavailable. | ✅ Full % |
-| **Gemini** | Detects `gemini-cli`; shows the plan cap or "not detected". gemini-cli persists no live quota. | ⚠️ Best-effort |
+| **Gemini** | Detects `gemini-cli` and reads the selected configuration root (defaults to `~/.gemini`); shows the plan cap or "not detected". gemini-cli persists no live quota. | ⚠️ Best-effort |
 
 Claude profiles are **auto-discovered** by parsing `CLAUDE_CONFIG_DIR=…` out of your shell rc
 files, so a `claude-work` alias just works. See [DESIGN.md](DESIGN.md) for the full write-up.
@@ -103,12 +103,24 @@ need an Apple Developer ID + notarization.
 
 ## Settings
 
-Click the gear in the panel to open the **Settings window**. **General** manages refresh cadence,
-menu-bar style, monthly budget, notifications, **Mask account details**, and launch at login;
-**Providers** enables or disables each service; **Data locations** selects provider
-configuration roots. Choose the Codex or Gemini configuration-root folder (usually
-`~/.codex` or `~/.gemini`), not an executable. Auto-discovered Claude profiles remain
-available, and named manual Claude profiles can be added to supplement automatic discovery.
+Open the **Settings window** from the panel gear or the menu-bar icon's right-click **Settings…**
+item. It never opens automatically at launch. **General** manages refresh cadence, menu-bar
+style, monthly budget, notifications, **Mask account details**, and launch at login; **Providers**
+enables or disables each service; **Data locations** selects provider configuration roots.
+
+Choose a Codex or Gemini configuration-root **folder**, not an executable. By default Codex uses
+`$CODEX_HOME` then `~/.codex`, and Gemini uses `~/.gemini`; **Choose folder** overrides that root
+and **Use automatic** restores the default lookup. Claude profiles are auto-discovered from shell
+configuration; use **Rescan** to refresh that list, and add named manual profiles to supplement
+automatic discovery. **Apply** validates, saves, and refreshes the configuration; **Cancel**
+discards the window's pending changes.
+
+<p align="center">
+  <img src="docs/settings-general.png" width="360" valign="top" alt="General and provider settings">
+  <img src="docs/settings-data-locations.png" width="360" valign="top" alt="Provider data locations and named Claude profiles">
+</p>
+
+<p align="center"><sub>Safe example data: configure cadence, budget, privacy, and providers; choose data roots and add named Claude configurations.</sub></p>
 
 ## Privacy
 
@@ -128,7 +140,7 @@ persisted, so it stays on until you turn it off.
 swift test                    # unit tests (readers, parsing, discovery)
 swift run usageprobe codex    # print parsed Codex usage (no network / Keychain)
 swift run usageprobe profiles # list discovered Claude profiles
-swift run previewgen <dir>    # render the UI to PNGs
+swift run previewgen <dir>    # render mock UI screenshots for the README
 ```
 
 ## Limitations & roadmap
@@ -136,8 +148,7 @@ swift run previewgen <dir>    # render the UI to PNGs
 - The Claude usage endpoint is **undocumented / unstable**; the app caches ≥180s and degrades
   gracefully, but Anthropic could change it.
 - Gemini has no local live signal until `gemini-cli` exposes one.
-- Planned: cost & tokens ($ today / 30d) + usage-history sparkline, Sparkle auto-update,
-  Homebrew cask, WidgetKit widget.
+- Planned: Sparkle auto-update, Homebrew cask, WidgetKit widget.
 
 ## Credits
 
