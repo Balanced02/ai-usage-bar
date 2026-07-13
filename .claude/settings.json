@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": [
+    { "marketplace": "claude-plugins-official", "plugin": "superpowers" }
+  ]
+}
