@@ -8,20 +8,19 @@
     <description>Auto-update feed for AI Usage Bar.</description>
     <language>en</language>
 
-    <!-- Add one <item> per release. Fill edSignature + length from the Release
-         workflow's "Sign update for Sparkle" step output.
+    <!-- Newest release first. Fill edSignature + length from the Release
+         workflow's "Sign update for Sparkle" step output. -->
     <item>
       <title>0.1.0</title>
-      <pubDate>Mon, 13 Jul 2026 12:00:00 +0000</pubDate>
+      <pubDate>Mon, 13 Jul 2026 13:08:02 +0000</pubDate>
       <sparkle:version>0.1.0</sparkle:version>
       <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure
         url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.1.0/AIUsageBar-v0.1.0.zip"
-        sparkle:edSignature="PASTE_ED_SIGNATURE"
-        length="PASTE_BYTE_LENGTH"
+        sparkle:edSignature="RP6z/UVTIoFXhHMuJpwAh0Gdzmw0rGsHK/cC28Ler3zd102SzoXgc5yXlvWpAeLAaGPIS4AlVzOT5NtkDY3dBw=="
+        length="2046756"
         type="application/octet-stream" />
     </item>
-    -->
   </channel>
 </rss>
