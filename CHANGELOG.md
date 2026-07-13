@@ -11,6 +11,10 @@ as you cut a tag.
 
 ## [Unreleased]
 
+### Changed
+- The release `.dmg` now includes an `/Applications` symlink, so mounting it shows the
+  standard drag-to-Applications install window instead of a bare `.app`.
+
 ## [0.1.1] - 2026-07-13
 
 ### Fixed

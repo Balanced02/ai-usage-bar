@@ -77,7 +77,12 @@ jobs:
           mkdir -p dist/artifacts
           ZIP="dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.zip"
           ditto -c -k --keepParent dist/AIUsageBar.app "$ZIP"
-          hdiutil create -volname "AI Usage Bar" -srcfolder dist/AIUsageBar.app \
+          # Stage the .app beside an /Applications symlink so the mounted DMG shows
+          # the familiar drag-to-Applications install window.
+          STAGE="$RUNNER_TEMP/dmg"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+          cp -R dist/AIUsageBar.app "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "AI Usage Bar" -srcfolder "$STAGE" \
             -ov -format UDZO "dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.dmg"
           echo "SHA256=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_ENV"
 
