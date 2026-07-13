@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Sparkle
 import AIUsageBarUI
 
 @main
@@ -44,6 +45,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let popover = NSPopover()
     private var settingsWindowController: SettingsWindowController?
 
+    // Sparkle auto-update. Reads SUFeedURL / SUPublicEDKey from Info.plist; checks
+    // on the schedule there and on demand via the "Check for Updates…" menu item.
+    // Lazy so merely constructing AppDelegate (e.g. in tests) doesn't start Sparkle;
+    // it's spun up in applicationDidFinishLaunching.
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)   // no Dock icon
 
@@ -68,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateButtonImage()
         observeLabel()
         model.startPolling()
+        _ = updaterController   // start Sparkle's scheduled update checks
     }
 
     @objc private func handleClick() {
@@ -119,6 +128,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.setSubmenu(dashboards, for: dashParent)
 
         menu.addItem(.separator())
+        let updates = NSMenuItem(title: "Check for Updates…",
+                                 action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+                                 keyEquivalent: "")
+        updates.target = updaterController
+        menu.addItem(updates)
         item(menu, "Settings…", #selector(showSettings), key: ",")
         item(menu, "Quit", #selector(quit), key: "q")
 

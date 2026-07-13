@@ -88,8 +88,20 @@ files, so a `claude-work` alias just works. See [DESIGN.md](DESIGN.md) for the f
 
 ## Install
 
-**Download:** grab the latest `.app` from [Releases](https://github.com/Balanced02/ai-usage-bar/releases).
-It's ad-hoc signed, so on first launch right-click the app → **Open** (or `xattr -dr com.apple.quarantine AIUsageBar.app`), then move it to `/Applications`.
+**Homebrew** (once a release is tagged):
+
+```bash
+brew tap balanced02/ai-usage-bar https://github.com/Balanced02/ai-usage-bar
+brew install --cask ai-usage-bar
+```
+
+**Download:** grab the latest `.app` or `.dmg` from [Releases](https://github.com/Balanced02/ai-usage-bar/releases).
+Notarized builds just open; an ad-hoc build needs a first-launch right-click → **Open**
+(or `xattr -dr com.apple.quarantine AIUsageBar.app`), then move it to `/Applications`.
+
+The app **auto-updates** via [Sparkle](https://sparkle-project.org) — or check manually
+from the menu-bar icon's right-click → **Check for Updates…**. See
+[docs/RELEASING.md](docs/RELEASING.md) for how releases are built, signed, and published.
 
 **Build from source** (macOS 14+, Xcode / Swift 6):
 
@@ -155,7 +167,8 @@ swift run previewgen <dir>    # render mock UI screenshots for the README
 - The Claude usage endpoint is **undocumented / unstable**; the app caches ≥180s and degrades
   gracefully, but Anthropic could change it.
 - Gemini has no local live signal until `gemini-cli` exposes one.
-- Planned: Sparkle auto-update, Homebrew cask, WidgetKit widget.
+- Sparkle auto-update + a Homebrew cask ship via tagged releases (see
+  [docs/RELEASING.md](docs/RELEASING.md)). Planned: a WidgetKit widget.
 
 ## Credits
 
