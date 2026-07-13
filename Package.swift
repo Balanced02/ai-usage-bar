@@ -40,7 +40,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AIUsageBarUITests",
-            dependencies: ["AIUsageBarUI", "AIUsageBarCore"]
+            dependencies: ["AIUsageBar", "AIUsageBarUI", "AIUsageBarCore"]
         ),
     ]
 )

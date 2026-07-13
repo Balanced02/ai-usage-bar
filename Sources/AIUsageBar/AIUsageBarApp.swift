@@ -37,7 +37,7 @@ final class SettingsWindowController: NSWindowController {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let model = AppModel()
 
     private var statusItem: NSStatusItem!
@@ -138,11 +138,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() { NSApplication.shared.terminate(nil) }
     @objc func showSettings() {
         if settingsWindowController == nil {
-            settingsWindowController = SettingsWindowController(model: model)
+            let controller = SettingsWindowController(model: model)
+            controller.window?.delegate = self
+            settingsWindowController = controller
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              window === settingsWindowController?.window else { return }
+        settingsWindowController = nil
     }
 
     @objc private func openDashboard(_ sender: NSMenuItem) {
