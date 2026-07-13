@@ -8,6 +8,20 @@ deny="$root/.personal-denylist"
 fail=0
 hit() { printf '  ✗ %s\n' "$1"; fail=1; }
 
+# Scan a blob of text against the gitignored denylist (case-insensitive, literal).
+check_denylist() {  # $1 = text, $2 = label prefix
+    [ -f "$deny" ] || return 0
+    while IFS= read -r term; do
+        [ -z "$term" ] && continue
+        [ "${term:0:1}" = "#" ] && continue
+        printf '%s\n' "$1" | grep -iqF "$term" && hit "$2: $term"
+    done < "$deny"
+}
+
+# Real-email pattern shared by the diff scan and the author-identity scan.
+email_re='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+email_allow='example\.(com|org|net)|acme\.com|test\.com|noreply|anthropic\.com'
+
 # Added lines only (drop the +++ file headers).
 diff="$(git diff --cached --unified=0 --diff-filter=ACM | grep -E '^\+' | grep -vE '^\+\+\+')"
 [ -z "$diff" ] && exit 0
@@ -17,18 +31,20 @@ secret_re='sk-ant-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9]{24,}|ghp_[A-Za-z0-9]{20,}|git
 printf '%s\n' "$diff" | grep -Eiq "$secret_re" && hit "possible API key / token / private key"
 
 # 2) Real emails — anything that isn't a known placeholder domain.
-email_re='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
-email_allow='example\.(com|org|net)|acme\.com|test\.com|noreply|anthropic\.com'
 emails="$(printf '%s\n' "$diff" | grep -oEi "$email_re" | grep -vEi "$email_allow" | sort -u)"
 [ -n "$emails" ] && hit "real email(s): $(printf '%s ' $emails)"
 
 # 3) Machine-specific denylist (gitignored; add your own terms).
-if [ -f "$deny" ]; then
-    while IFS= read -r term; do
-        [ -z "$term" ] && continue
-        [ "${term:0:1}" = "#" ] && continue
-        printf '%s\n' "$diff" | grep -iqF "$term" && hit "denylisted term: $term"
-    done < "$deny"
+check_denylist "$diff" "denylisted term"
+
+# 4) Commit author identity — metadata never shows up in the diff, so a real name
+#    or email in the author/committer field (e.g. a github.com web-UI commit) would
+#    otherwise slip through. Check the identity this commit will actually record.
+ident="$(git var GIT_AUTHOR_IDENT 2>/dev/null | sed 's/> .*/>/')"   # "Name <email>"
+if [ -n "$ident" ]; then
+    check_denylist "$ident" "denylisted term in commit author ($ident)"
+    a_email="$(printf '%s' "$ident" | grep -oEi "$email_re" | grep -vEi "$email_allow" | sort -u)"
+    [ -n "$a_email" ] && hit "commit author uses a real email: $(printf '%s ' $a_email)"
 fi
 
 if [ "$fail" -ne 0 ]; then

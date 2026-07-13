@@ -64,7 +64,10 @@ Scripts/install-hooks.sh          # activate the pre-commit personal-data guard 
 employer/domain names, private repo names, Keychain hashes, or tokens.
 
 - A **pre-commit hook** (`Scripts/hooks/pre-commit`, activated by `Scripts/install-hooks.sh`)
-  blocks real emails, common secret patterns, and terms from a **gitignored** `.personal-denylist`.
+  blocks real emails, common secret patterns, terms from a **gitignored** `.personal-denylist`,
+  and a real name/email in the **commit author identity** (`git var GIT_AUTHOR_IDENT`) — the last
+  guards against a github.com web-UI commit stamping your profile name. Note it cannot catch
+  commits authored *server-side* on GitHub (e.g. the web "Merge" button); prefer merging locally.
   Don't disable it; if you must bypass, you're probably about to leak something.
 - Screenshots are rendered from **mock `example.com` accounts** via `previewgen` — never real data.
 - In docs/comments use placeholders: `you@example.com`, `jane.doe@acme.com`.
