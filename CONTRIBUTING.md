@@ -10,6 +10,7 @@ Requires macOS 14+ and Swift 6 (Xcode 16+).
 swift build            # build everything
 swift test             # run the unit tests
 Scripts/build-app.sh --run   # build + launch the menu-bar app
+Scripts/install-hooks.sh     # activate the pre-commit personal-data / secret guard (once)
 ```
 
 ## Project layout

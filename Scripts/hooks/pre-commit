@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Pre-commit guard: block personal data / secrets from entering the repo.
+# Scans only the ADDED lines in staged changes. Bypass (not recommended) with
+# `git commit --no-verify`.
+
+root="$(git rev-parse --show-toplevel)"
+deny="$root/.personal-denylist"
+fail=0
+hit() { printf '  ✗ %s\n' "$1"; fail=1; }
+
+# Added lines only (drop the +++ file headers).
+diff="$(git diff --cached --unified=0 --diff-filter=ACM | grep -E '^\+' | grep -vE '^\+\+\+')"
+[ -z "$diff" ] && exit 0
+
+# 1) API keys / tokens / private keys.
+secret_re='sk-ant-[A-Za-z0-9_-]{8,}|sk-[A-Za-z0-9]{24,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY'
+printf '%s\n' "$diff" | grep -Eiq "$secret_re" && hit "possible API key / token / private key"
+
+# 2) Real emails — anything that isn't a known placeholder domain.
+email_re='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+email_allow='example\.(com|org|net)|acme\.com|test\.com|noreply|anthropic\.com'
+emails="$(printf '%s\n' "$diff" | grep -oEi "$email_re" | grep -vEi "$email_allow" | sort -u)"
+[ -n "$emails" ] && hit "real email(s): $(printf '%s ' $emails)"
+
+# 3) Machine-specific denylist (gitignored; add your own terms).
+if [ -f "$deny" ]; then
+    while IFS= read -r term; do
+        [ -z "$term" ] && continue
+        [ "${term:0:1}" = "#" ] && continue
+        printf '%s\n' "$diff" | grep -iqF "$term" && hit "denylisted term: $term"
+    done < "$deny"
+fi
+
+if [ "$fail" -ne 0 ]; then
+    echo ""
+    echo "✗ commit blocked — personal data / secrets in staged changes (above)."
+    echo "  Remove them, or bypass with:  git commit --no-verify"
+    exit 1
+fi
+exit 0
