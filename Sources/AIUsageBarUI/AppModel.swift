@@ -43,6 +43,8 @@ public struct SettingsDraft: Equatable {
     public var geminiEnabled: Bool
     public var notificationsEnabled: Bool
     public var menuBarStyle: MenuBarStyle
+    public var monthlyBudgetUSD: Double
+    public var maskAccounts: Bool
     public var launchAtLogin: Bool
     public var providerSettings: ProviderSettings
 }
@@ -322,6 +324,8 @@ public final class AppModel {
             geminiEnabled: geminiEnabled,
             notificationsEnabled: notificationsEnabled,
             menuBarStyle: menuBarStyle,
+            monthlyBudgetUSD: monthlyBudgetUSD,
+            maskAccounts: maskAccounts,
             launchAtLogin: launchAtLogin,
             providerSettings: providerSettings
         )
@@ -357,6 +361,8 @@ public final class AppModel {
         geminiEnabled = draft.geminiEnabled
         notificationsEnabled = draft.notificationsEnabled
         menuBarStyle = draft.menuBarStyle
+        monthlyBudgetUSD = draft.monthlyBudgetUSD
+        maskAccounts = draft.maskAccounts
         providerSettings = draft.providerSettings
         isApplying = false
         notifier.enabled = notificationsEnabled

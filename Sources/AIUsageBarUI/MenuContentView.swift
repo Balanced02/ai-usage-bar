@@ -4,7 +4,12 @@ import AIUsageBarCore
 
 public struct MenuContentView: View {
     @Bindable public var model: AppModel
-    public init(model: AppModel) { self.model = model }
+    private let openSettings: () -> Void
+
+    public init(model: AppModel, openSettings: @escaping () -> Void) {
+        self.model = model
+        self.openSettings = openSettings
+    }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -68,50 +73,11 @@ public struct MenuContentView: View {
 
             Spacer()
 
-            Menu {
-                Section("Refresh every") {
-                    Picker("Cadence", selection: $model.cadenceSeconds) {
-                        Text("30s").tag(30.0)
-                        Text("45s").tag(45.0)
-                        Text("1m").tag(60.0)
-                        Text("2m").tag(120.0)
-                        Text("5m").tag(300.0)
-                    }
-                    .pickerStyle(.inline)
-                }
-                Section("Providers") {
-                    Toggle("Codex", isOn: $model.codexEnabled)
-                    Toggle("Claude", isOn: $model.claudeEnabled)
-                    Toggle("Gemini", isOn: $model.geminiEnabled)
-                }
-                Section("Menu bar") {
-                    Picker("Style", selection: $model.menuBarStyle) {
-                        ForEach(MenuBarStyle.allCases, id: \.self) { style in
-                            Text(style.label).tag(style)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                }
-                Section("Monthly budget") {
-                    Picker("Budget", selection: $model.monthlyBudgetUSD) {
-                        Text("Off").tag(0.0)
-                        Text("$50").tag(50.0)
-                        Text("$100").tag(100.0)
-                        Text("$250").tag(250.0)
-                        Text("$500").tag(500.0)
-                        Text("$1000").tag(1000.0)
-                    }
-                    .pickerStyle(.inline)
-                }
-                Section {
-                    Toggle("Notifications", isOn: $model.notificationsEnabled)
-                    Toggle("Mask account details", isOn: $model.maskAccounts)
-                }
-            } label: {
+            Button(action: openSettings) {
                 Image(systemName: "gearshape")
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
+            .buttonStyle(.borderless)
+            .help("Settings")
 
             Button {
                 NSApplication.shared.terminate(nil)
