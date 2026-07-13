@@ -59,6 +59,9 @@ public final class AppModel {
     public var selectedKind: ProviderKind?
 
     private var lastClaude: [ProviderUsage] = []
+    /// The resolved Claude profiles represented by the currently applied settings.
+    /// Disabled Claude is intentionally represented by no effective profiles.
+    private var appliedClaudeProfiles: [ClaudeProfile]
     private let debugEnabled = ProcessInfo.processInfo.environment["AIUSAGEBAR_DEBUG"] != nil
 
     // Settings (persisted).
@@ -76,8 +79,13 @@ public final class AppModel {
     private var service: UsageService
     private var pollTask: Task<Void, Never>?
     private let defaults: UserDefaults
+    private let discoverClaudeProfiles: () -> [ClaudeProfile]
 
-    public init(defaults: UserDefaults = .standard) {
+    public convenience init(defaults: UserDefaults = .standard) {
+        self.init(defaults: defaults, discoverClaudeProfiles: { ClaudeProfileDiscovery.discover() })
+    }
+
+    init(defaults: UserDefaults, discoverClaudeProfiles: @escaping () -> [ClaudeProfile]) {
         let cadenceSeconds = defaults.object(forKey: "cadenceSeconds") as? Double ?? 45
         let codexEnabled = defaults.object(forKey: "codexEnabled") as? Bool ?? true
         let claudeEnabled = defaults.object(forKey: "claudeEnabled") as? Bool ?? true
@@ -85,8 +93,16 @@ public final class AppModel {
         let notificationsEnabled = defaults.object(forKey: "notificationsEnabled") as? Bool ?? true
         let menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .text
         let providerSettings = ProviderSettings.load(from: defaults)
+        let initialConfig = Self.usageConfig(
+            providerSettings: providerSettings,
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            discovered: discoverClaudeProfiles()
+        )
 
         self.defaults = defaults
+        self.discoverClaudeProfiles = discoverClaudeProfiles
         self.cadenceSeconds = cadenceSeconds
         self.codexEnabled = codexEnabled
         self.claudeEnabled = claudeEnabled
@@ -94,12 +110,8 @@ public final class AppModel {
         self.notificationsEnabled = notificationsEnabled
         self.menuBarStyle = menuBarStyle
         self.providerSettings = providerSettings
-        self.service = UsageService(config: Self.usageConfig(
-            providerSettings: providerSettings,
-            codexEnabled: codexEnabled,
-            claudeEnabled: claudeEnabled,
-            geminiEnabled: geminiEnabled
-        ))
+        self.appliedClaudeProfiles = Self.effectiveClaudeProfiles(for: initialConfig)
+        self.service = UsageService(config: initialConfig)
         notifier.enabled = notificationsEnabled
     }
 
@@ -125,12 +137,16 @@ public final class AppModel {
         // 1. Publish fast local providers (Codex + Gemini) immediately, with
         //    identity-only Claude placeholders so the panel is never blank.
         let local = await service.readLocal()
-        if lastClaude.isEmpty { lastClaude = await service.claudePlaceholders() }
+        if !claudeEnabled {
+            lastClaude = []
+        } else if lastClaude.isEmpty {
+            lastClaude = await service.claudePlaceholders()
+        }
         rebuild(local: local)
 
         // 2. Claude live data (may briefly block on a first-run Keychain prompt).
         let claude = await service.readClaude()
-        if !claude.isEmpty { lastClaude = claude }
+        if claudeEnabled, !claude.isEmpty { lastClaude = claude }
         rebuild(local: local)
 
         notifier.evaluate(providers)
@@ -151,7 +167,7 @@ public final class AppModel {
     private func rebuild(local: (codex: ProviderUsage?, gemini: ProviderUsage?)) {
         var arr: [ProviderUsage] = []
         if let c = local.codex { arr.append(c) }
-        arr.append(contentsOf: lastClaude)
+        if claudeEnabled { arr.append(contentsOf: lastClaude) }
         if let g = local.gemini { arr.append(g) }
         providers = arr
         updateLabel()
@@ -300,13 +316,13 @@ public final class AppModel {
     }
 
     public func automaticClaudeProfiles() -> [ClaudeProfile] {
-        ClaudeProfileDiscovery.discover()
+        discoverClaudeProfiles()
     }
 
     /// Validates and applies every setting as a single refresh operation.
     /// Returns a validation message without changing live state when invalid.
     public func apply(_ draft: SettingsDraft) async -> String? {
-        let discovered = ClaudeProfileDiscovery.discover()
+        let discovered = discoverClaudeProfiles()
         var config: UsageConfig
         do {
             config = try draft.providerSettings.usageConfig(
@@ -319,14 +335,8 @@ public final class AppModel {
             return error.localizedDescription
         }
         Self.applyRuntimeOverrides(to: &config)
-
-        let existingProfiles = Self.usageConfig(
-            providerSettings: providerSettings,
-            codexEnabled: codexEnabled,
-            claudeEnabled: claudeEnabled,
-            geminiEnabled: geminiEnabled,
-            discovered: discovered
-        ).claudeProfiles
+        let effectiveClaudeProfiles = Self.effectiveClaudeProfiles(for: config)
+        let shouldClearClaudeCards = appliedClaudeProfiles != effectiveClaudeProfiles
 
         cadenceSeconds = draft.cadenceSeconds
         codexEnabled = draft.codexEnabled
@@ -339,7 +349,8 @@ public final class AppModel {
         launchAtLogin = draft.launchAtLogin
         persist()
 
-        if existingProfiles != config.claudeProfiles { lastClaude = [] }
+        if shouldClearClaudeCards || !draft.claudeEnabled { lastClaude = [] }
+        appliedClaudeProfiles = effectiveClaudeProfiles
         await service.update(config: config)
         await refresh()
         return nil
@@ -373,6 +384,10 @@ public final class AppModel {
         )
         applyRuntimeOverrides(to: &config)
         return config
+    }
+
+    private static func effectiveClaudeProfiles(for config: UsageConfig) -> [ClaudeProfile] {
+        config.claudeEnabled ? config.claudeProfiles : []
     }
 
     private static func applyRuntimeOverrides(to config: inout UsageConfig) {
