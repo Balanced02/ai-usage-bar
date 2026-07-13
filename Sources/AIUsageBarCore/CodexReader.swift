@@ -80,7 +80,7 @@ public struct CodexReader: Sendable {
         guard FileManager.default.fileExists(atPath: sessions.path) else {
             return ProviderUsage(id: "codex", kind: .codex, displayName: "Codex",
                                  status: .notInstalled,
-                                 detail: "No ~/.codex/sessions found",
+                                 detail: "No \(sessions.path) found",
                                  sourcePath: sessions.path)
         }
 
@@ -150,7 +150,7 @@ public struct CodexReader: Sendable {
             status: windows.isEmpty ? .noData : .ok,
             detail: nil,
             lastUpdated: snap.timestamp,
-            sourcePath: bestFile?.path
+            sourcePath: bestFile.map { sourcePath(for: $0, in: sessions) }
         )
     }
 
@@ -177,6 +177,16 @@ public struct CodexReader: Sendable {
 
     private func parseDate(_ s: String?) -> Date? {
         ISODate.parse(s)
+    }
+
+    /// Keeps diagnostics rooted at the configured path (for example, `/var`
+    /// instead of the equivalent `/private/var` returned by an enumerator).
+    private func sourcePath(for file: URL, in sessions: URL) -> String {
+        let resolvedSessions = sessions.resolvingSymlinksInPath().path
+        let resolvedFile = file.resolvingSymlinksInPath().path
+        guard resolvedFile.hasPrefix(resolvedSessions + "/") else { return file.path }
+        let relativePath = String(resolvedFile.dropFirst(resolvedSessions.count + 1))
+        return sessions.appendingPathComponent(relativePath).path
     }
 
     /// Scans the tail of one rollout file for the last token_count event that

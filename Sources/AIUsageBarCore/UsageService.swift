@@ -5,17 +5,22 @@ public struct UsageConfig: Sendable {
     public var codexEnabled: Bool
     public var claudeEnabled: Bool
     public var geminiEnabled: Bool
+    public var codexHome: URL?
+    public var geminiHome: URL?
     public var claudeProfiles: [ClaudeProfile]
     /// Minimum seconds between live Claude endpoint calls (avoids 429s).
     public var claudeMinInterval: TimeInterval
     public var allowKeychain: Bool
 
     public init(codexEnabled: Bool = true, claudeEnabled: Bool = true, geminiEnabled: Bool = true,
+                codexHome: URL? = nil, geminiHome: URL? = nil,
                 claudeProfiles: [ClaudeProfile] = [], claudeMinInterval: TimeInterval = 180,
                 allowKeychain: Bool = true) {
         self.codexEnabled = codexEnabled
         self.claudeEnabled = claudeEnabled
         self.geminiEnabled = geminiEnabled
+        self.codexHome = codexHome
+        self.geminiHome = geminiHome
         self.claudeProfiles = claudeProfiles
         self.claudeMinInterval = claudeMinInterval
         self.allowKeychain = allowKeychain
@@ -40,24 +45,26 @@ public actor UsageService {
     }
 
     public func update(config: UsageConfig) {
+        let profilesChanged = self.config.claudeProfiles != config.claudeProfiles
         self.config = config
+        if profilesChanged { claudeCache = [] }
         // Force a Claude refresh on next call if the profile set changed.
         lastClaudeFetch = nil
     }
 
     public func refresh(now: Date = Date()) async -> [ProviderUsage] {
         var out: [ProviderUsage] = []
-        if config.codexEnabled { out.append(CodexReader().read()) }
+        if config.codexEnabled { out.append(CodexReader(codexHome: config.codexHome).read()) }
         if config.claudeEnabled { out.append(contentsOf: await claude(now: now)) }
-        if config.geminiEnabled { out.append(GeminiReader().read()) }
+        if config.geminiEnabled { out.append(GeminiReader(geminiHome: config.geminiHome).read()) }
         return out
     }
 
     /// Fast, local-only providers (Codex + Gemini) — safe to read every refresh
     /// and never blocks on the network or Keychain.
     public func readLocal() -> (codex: ProviderUsage?, gemini: ProviderUsage?) {
-        (config.codexEnabled ? CodexReader().read() : nil,
-         config.geminiEnabled ? GeminiReader().read() : nil)
+        (config.codexEnabled ? CodexReader(codexHome: config.codexHome).read() : nil,
+         config.geminiEnabled ? GeminiReader(geminiHome: config.geminiHome).read() : nil)
     }
 
     /// Claude cards (throttled live endpoint + Keychain). May block briefly on a
