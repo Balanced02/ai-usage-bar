@@ -19,7 +19,7 @@ public struct LabelChip: Identifiable, Sendable {
 }
 
 /// How the menu-bar title is drawn.
-public enum MenuBarStyle: String, Sendable, CaseIterable {
+public enum MenuBarStyle: String, Sendable, CaseIterable, Equatable {
     case text     // "Cx 2%  Cl 30%"
     case meters   // tiny dual-bar meters per provider
     case number   // worst window as a single colored "85%"
@@ -35,6 +35,18 @@ public enum MenuBarStyle: String, Sendable, CaseIterable {
     }
 }
 
+/// The complete, editable settings state shown by the settings window.
+public struct SettingsDraft: Equatable {
+    public var cadenceSeconds: Double
+    public var codexEnabled: Bool
+    public var claudeEnabled: Bool
+    public var geminiEnabled: Bool
+    public var notificationsEnabled: Bool
+    public var menuBarStyle: MenuBarStyle
+    public var launchAtLogin: Bool
+    public var providerSettings: ProviderSettings
+}
+
 @MainActor
 @Observable
 public final class AppModel {
@@ -47,38 +59,71 @@ public final class AppModel {
     public var selectedKind: ProviderKind?
 
     private var lastClaude: [ProviderUsage] = []
+    /// The resolved Claude profiles represented by the currently applied settings.
+    /// Disabled Claude is intentionally represented by no effective profiles.
+    private var appliedClaudeProfiles: [ClaudeProfile]
     private let debugEnabled = ProcessInfo.processInfo.environment["AIUSAGEBAR_DEBUG"] != nil
 
-    // Settings (persisted).
-    public var cadenceSeconds: Double { didSet { persist(); } }
-    public var codexEnabled: Bool { didSet { persist(); reconfigure() } }
-    public var claudeEnabled: Bool { didSet { persist(); reconfigure() } }
-    public var geminiEnabled: Bool { didSet { persist(); reconfigure() } }
-    public var notificationsEnabled: Bool { didSet { persist(); notifier.enabled = notificationsEnabled } }
-    public var menuBarStyle: MenuBarStyle { didSet { persist(); updateLabel() } }
+    // Settings (persisted). The menu's live controls mutate these directly; the
+    // `didSet` handlers persist/reconfigure, and are suppressed during `apply(_:)`.
+    public var cadenceSeconds: Double { didSet { settingChanged() } }
+    public var codexEnabled: Bool { didSet { settingChanged(rebuildConfig: true) } }
+    public var claudeEnabled: Bool { didSet { settingChanged(rebuildConfig: true) } }
+    public var geminiEnabled: Bool { didSet { settingChanged(rebuildConfig: true) } }
+    public var notificationsEnabled: Bool { didSet { settingChanged(); notifier.enabled = notificationsEnabled } }
+    public var menuBarStyle: MenuBarStyle { didSet { settingChanged(); updateLabel() } }
     /// Optional monthly $ budget for the cost gauge (0 = off).
-    public var monthlyBudgetUSD: Double { didSet { persist() } }
+    public var monthlyBudgetUSD: Double { didSet { settingChanged() } }
     /// Masks emails + repo names in the panel (for screen-sharing).
-    public var maskAccounts: Bool { didSet { persist() } }
+    public var maskAccounts: Bool { didSet { settingChanged() } }
+    private var providerSettings: ProviderSettings
+
+    /// Suppresses the reactive `didSet` handlers during a bulk `apply(_:)`.
+    private var isApplying = false
 
     public let notifier = UsageNotifier()
     private let history = UsageHistory()
 
     private var service: UsageService
     private var pollTask: Task<Void, Never>?
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+    private let discoverClaudeProfiles: () -> [ClaudeProfile]
 
-    public init() {
-        cadenceSeconds = defaults.object(forKey: "cadenceSeconds") as? Double ?? 45
-        codexEnabled = defaults.object(forKey: "codexEnabled") as? Bool ?? true
-        claudeEnabled = defaults.object(forKey: "claudeEnabled") as? Bool ?? true
-        geminiEnabled = defaults.object(forKey: "geminiEnabled") as? Bool ?? true
-        notificationsEnabled = defaults.object(forKey: "notificationsEnabled") as? Bool ?? true
-        menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .text
-        monthlyBudgetUSD = defaults.object(forKey: "monthlyBudgetUSD") as? Double ?? 0
-        maskAccounts = defaults.object(forKey: "maskAccounts") as? Bool ?? false
-        service = UsageService(config: Self.buildConfig(codex: true, claude: true, gemini: true))
-        reconfigure()
+    public convenience init(defaults: UserDefaults = .standard) {
+        self.init(defaults: defaults, discoverClaudeProfiles: { ClaudeProfileDiscovery.discover() })
+    }
+
+    init(defaults: UserDefaults, discoverClaudeProfiles: @escaping () -> [ClaudeProfile]) {
+        let cadenceSeconds = defaults.object(forKey: "cadenceSeconds") as? Double ?? 45
+        let codexEnabled = defaults.object(forKey: "codexEnabled") as? Bool ?? true
+        let claudeEnabled = defaults.object(forKey: "claudeEnabled") as? Bool ?? true
+        let geminiEnabled = defaults.object(forKey: "geminiEnabled") as? Bool ?? true
+        let notificationsEnabled = defaults.object(forKey: "notificationsEnabled") as? Bool ?? true
+        let menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .text
+        let monthlyBudgetUSD = defaults.object(forKey: "monthlyBudgetUSD") as? Double ?? 0
+        let maskAccounts = defaults.object(forKey: "maskAccounts") as? Bool ?? false
+        let providerSettings = ProviderSettings.load(from: defaults)
+        let initialConfig = Self.usageConfig(
+            providerSettings: providerSettings,
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            discovered: discoverClaudeProfiles()
+        )
+
+        self.defaults = defaults
+        self.discoverClaudeProfiles = discoverClaudeProfiles
+        self.cadenceSeconds = cadenceSeconds
+        self.codexEnabled = codexEnabled
+        self.claudeEnabled = claudeEnabled
+        self.geminiEnabled = geminiEnabled
+        self.notificationsEnabled = notificationsEnabled
+        self.menuBarStyle = menuBarStyle
+        self.monthlyBudgetUSD = monthlyBudgetUSD
+        self.maskAccounts = maskAccounts
+        self.providerSettings = providerSettings
+        self.appliedClaudeProfiles = Self.effectiveClaudeProfiles(for: initialConfig)
+        self.service = UsageService(config: initialConfig)
         notifier.enabled = notificationsEnabled
     }
 
@@ -104,12 +149,16 @@ public final class AppModel {
         // 1. Publish fast local providers (Codex + Gemini) immediately, with
         //    identity-only Claude placeholders so the panel is never blank.
         let local = await service.readLocal()
-        if lastClaude.isEmpty { lastClaude = await service.claudePlaceholders() }
+        if !claudeEnabled {
+            lastClaude = []
+        } else if lastClaude.isEmpty {
+            lastClaude = await service.claudePlaceholders()
+        }
         rebuild(local: local)
 
         // 2. Claude live data (may briefly block on a first-run Keychain prompt).
         let claude = await service.readClaude()
-        if !claude.isEmpty { lastClaude = claude }
+        if claudeEnabled, !claude.isEmpty { lastClaude = claude }
         rebuild(local: local)
 
         notifier.evaluate(providers)
@@ -130,7 +179,7 @@ public final class AppModel {
     private func rebuild(local: (codex: ProviderUsage?, gemini: ProviderUsage?)) {
         var arr: [ProviderUsage] = []
         if let c = local.codex { arr.append(c) }
-        arr.append(contentsOf: lastClaude)
+        if claudeEnabled { arr.append(contentsOf: lastClaude) }
         if let g = local.gemini { arr.append(g) }
         providers = arr
         updateLabel()
@@ -255,6 +304,7 @@ public final class AppModel {
     public var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }
         set {
+            guard newValue != launchAtLogin else { return }
             do {
                 if newValue { try SMAppService.mainApp.register() }
                 else { try SMAppService.mainApp.unregister() }
@@ -262,6 +312,62 @@ public final class AppModel {
                 NSLog("ai-usage-bar: launch-at-login toggle failed: \(error)")
             }
         }
+    }
+
+    public func settingsDraft() -> SettingsDraft {
+        SettingsDraft(
+            cadenceSeconds: cadenceSeconds,
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            notificationsEnabled: notificationsEnabled,
+            menuBarStyle: menuBarStyle,
+            launchAtLogin: launchAtLogin,
+            providerSettings: providerSettings
+        )
+    }
+
+    public func automaticClaudeProfiles() -> [ClaudeProfile] {
+        discoverClaudeProfiles()
+    }
+
+    /// Validates and applies every setting as a single refresh operation.
+    /// Returns a validation message without changing live state when invalid.
+    public func apply(_ draft: SettingsDraft) async -> String? {
+        let discovered = discoverClaudeProfiles()
+        var config: UsageConfig
+        do {
+            config = try draft.providerSettings.usageConfig(
+                codexEnabled: draft.codexEnabled,
+                claudeEnabled: draft.claudeEnabled,
+                geminiEnabled: draft.geminiEnabled,
+                discoveredProfiles: discovered
+            )
+        } catch {
+            return error.localizedDescription
+        }
+        Self.applyRuntimeOverrides(to: &config)
+        let effectiveClaudeProfiles = Self.effectiveClaudeProfiles(for: config)
+        let shouldClearClaudeCards = appliedClaudeProfiles != effectiveClaudeProfiles
+
+        isApplying = true
+        cadenceSeconds = draft.cadenceSeconds
+        codexEnabled = draft.codexEnabled
+        claudeEnabled = draft.claudeEnabled
+        geminiEnabled = draft.geminiEnabled
+        notificationsEnabled = draft.notificationsEnabled
+        menuBarStyle = draft.menuBarStyle
+        providerSettings = draft.providerSettings
+        isApplying = false
+        notifier.enabled = notificationsEnabled
+        launchAtLogin = draft.launchAtLogin
+        persist()
+
+        if shouldClearClaudeCards || !draft.claudeEnabled { lastClaude = [] }
+        appliedClaudeProfiles = effectiveClaudeProfiles
+        await service.update(config: config)
+        await refresh()
+        return nil
     }
 
     private func persist() {
@@ -273,23 +379,57 @@ public final class AppModel {
         defaults.set(menuBarStyle.rawValue, forKey: "menuBarStyle")
         defaults.set(monthlyBudgetUSD, forKey: "monthlyBudgetUSD")
         defaults.set(maskAccounts, forKey: "maskAccounts")
+        providerSettings.save(to: defaults)
     }
 
+    /// Reactive path for the menu's live controls; a no-op during `apply(_:)`.
+    private func settingChanged(rebuildConfig: Bool = false) {
+        guard !isApplying else { return }
+        persist()
+        if rebuildConfig { reconfigure() }
+    }
+
+    /// Rebuilds the service config from the current settings (gear-menu path).
     private func reconfigure() {
-        let config = Self.buildConfig(codex: codexEnabled, claude: claudeEnabled, gemini: geminiEnabled)
+        let config = Self.usageConfig(providerSettings: providerSettings,
+                                      codexEnabled: codexEnabled,
+                                      claudeEnabled: claudeEnabled,
+                                      geminiEnabled: geminiEnabled,
+                                      discovered: discoverClaudeProfiles())
+        appliedClaudeProfiles = Self.effectiveClaudeProfiles(for: config)
+        if !claudeEnabled { lastClaude = [] }
         Task { await service.update(config: config) }
     }
 
-    private static func buildConfig(codex: Bool, claude: Bool, gemini: Bool) -> UsageConfig {
-        var config = UsageConfig.autoDetect()
-        config.codexEnabled = codex
-        config.claudeEnabled = claude
-        config.geminiEnabled = gemini
+    private static func usageConfig(providerSettings: ProviderSettings,
+                                    codexEnabled: Bool,
+                                    claudeEnabled: Bool,
+                                    geminiEnabled: Bool,
+                                    discovered: [ClaudeProfile] = ClaudeProfileDiscovery.discover()) -> UsageConfig {
+        var config = (try? providerSettings.usageConfig(
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            discoveredProfiles: discovered
+        )) ?? UsageConfig(
+            codexEnabled: codexEnabled,
+            claudeEnabled: claudeEnabled,
+            geminiEnabled: geminiEnabled,
+            claudeProfiles: discovered
+        )
+        applyRuntimeOverrides(to: &config)
+        return config
+    }
+
+    private static func effectiveClaudeProfiles(for config: UsageConfig) -> [ClaudeProfile] {
+        config.claudeEnabled ? config.claudeProfiles : []
+    }
+
+    private static func applyRuntimeOverrides(to config: inout UsageConfig) {
         // Dev/test escape hatch: skip Keychain + live endpoint (Claude falls back
         // to local token activity). Set AIUSAGEBAR_NO_KEYCHAIN=1 to enable.
         if ProcessInfo.processInfo.environment["AIUSAGEBAR_NO_KEYCHAIN"] != nil {
             config.allowKeychain = false
         }
-        return config
     }
 }

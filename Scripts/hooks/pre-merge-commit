@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Git skips pre-commit for merge commits, so run the same guard here.
+exec "$(dirname "$0")/pre-commit"
