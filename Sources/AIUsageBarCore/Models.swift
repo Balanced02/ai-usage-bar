@@ -123,8 +123,12 @@ public struct RepoCost: Codable, Sendable, Hashable {
     public var repo: String
     public var tokens: Int
     public var usd: Double
-    public init(repo: String, tokens: Int, usd: Double) {
+    public var byModel: [ModelCost]     // model mix *within* this project, $-desc
+    public var dailyUSD: [Double]       // recent daily equivalent-$ (oldest→newest), for a trend line
+    public init(repo: String, tokens: Int, usd: Double,
+                byModel: [ModelCost] = [], dailyUSD: [Double] = []) {
         self.repo = repo; self.tokens = tokens; self.usd = usd
+        self.byModel = byModel; self.dailyUSD = dailyUSD
     }
 }
 

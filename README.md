@@ -45,7 +45,8 @@ accounts at a glance. Everything is read locally; nothing leaves your machine.
 - **Notifications** — native alerts when a window crosses 75% / 90%, is burning too fast, or clears.
 - **Cost & analytics** — an equivalent-$ breakdown per account: today / 30-day, **by model**,
   **by project**, cache-hit efficiency, a **month-end forecast**, and an optional **budget gauge** —
-  all computed from your local logs (see below).
+  all computed from your local logs (see below). Each project line **expands** to its own model
+  mix, share of spend, and a 14-day trend — and worktrees roll up into the project they belong to.
 - **Model-downshift nudge** — when your priciest model is eating its weekly limit and a cheaper one
   has room: *"Opus is 90% of spend · 7D Opus 90% — Sonnet has 80% left, try /model sonnet"*.
 - **Best-account hint** — "Use Work — 88% free" when you have multiple profiles, so you don't
@@ -66,7 +67,7 @@ color for grouping and escalate to orange/red near the limit.
   <img src="docs/cost.png" width="330" valign="top" alt="cost & analytics breakdown">
   <img src="docs/downshift.png" width="250" valign="top" alt="model-downshift nudge">
 </p>
-<p align="center"><sub>Left: expand any account's cost line for model mix, per-project spend, cache efficiency, forecast &amp; budget. Right: the downshift nudge when a pricey model is eating its weekly limit.</sub></p>
+<p align="center"><sub>Left: expand any account's cost line for model mix and per-project spend, then drill into a project for its own model mix, share of spend &amp; 14-day trend; plus cache efficiency, forecast &amp; budget. Right: the downshift nudge when a pricey model is eating its weekly limit.</sub></p>
 
 ## How it reads usage
 

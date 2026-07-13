@@ -174,6 +174,15 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(cost.byModel.first?.model, "Opus")               // sorted by $ desc
         XCTAssertEqual(Set(cost.byRepo.map(\.repo)), ["api-server", "web-app"])
 
+        // Per-project drilldown: each project carries its own model mix + daily trend.
+        let apiRepo = try XCTUnwrap(cost.byRepo.first { $0.repo == "api-server" })
+        XCTAssertEqual(apiRepo.byModel.map(\.model), ["Opus"])          // api-server used only Opus
+        XCTAssertEqual(apiRepo.dailyUSD.count, 14)                       // 14-day trend window
+        XCTAssertGreaterThan(apiRepo.dailyUSD.last ?? 0, 0)             // today's bucket has spend
+        XCTAssertEqual(apiRepo.dailyUSD.dropLast().reduce(0, +), 0, accuracy: 1e-9)  // nothing before today
+        let webRepo = try XCTUnwrap(cost.byRepo.first { $0.repo == "web-app" })
+        XCTAssertEqual(webRepo.byModel.map(\.model), ["Sonnet"])
+
         try? fm.removeItem(at: home)
     }
 

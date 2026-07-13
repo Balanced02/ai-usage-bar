@@ -367,9 +367,19 @@ let mockCost = CostSummary(
     byModel: [ModelCost(model: "Opus", tokens: 14_000_000, usd: 92),
               ModelCost(model: "Sonnet", tokens: 7_000_000, usd: 30.5),
               ModelCost(model: "Haiku", tokens: 1_700_000, usd: 6)],
-    byRepo: [RepoCost(repo: "api-server", tokens: 12_000_000, usd: 78),
-             RepoCost(repo: "web-app", tokens: 6_000_000, usd: 32),
-             RepoCost(repo: "infra", tokens: 4_700_000, usd: 18.5)],
+    byRepo: [RepoCost(repo: "api-server", tokens: 12_000_000, usd: 78,
+                      byModel: [ModelCost(model: "Opus", tokens: 9_000_000, usd: 55),
+                                ModelCost(model: "Sonnet", tokens: 2_400_000, usd: 18),
+                                ModelCost(model: "Haiku", tokens: 600_000, usd: 5)],
+                      dailyUSD: [3, 4, 2, 5, 6, 4, 7, 5, 9, 6, 8, 7, 6, 10]),
+             RepoCost(repo: "web-app", tokens: 6_000_000, usd: 32,
+                      byModel: [ModelCost(model: "Sonnet", tokens: 4_500_000, usd: 24),
+                                ModelCost(model: "Opus", tokens: 1_500_000, usd: 8)],
+                      dailyUSD: [1, 2, 1, 3, 2, 4, 2, 3, 1, 4, 3, 2, 3, 2]),
+             RepoCost(repo: "infra", tokens: 4_700_000, usd: 18.5,
+                      byModel: [ModelCost(model: "Haiku", tokens: 3_200_000, usd: 11),
+                                ModelCost(model: "Sonnet", tokens: 1_500_000, usd: 7.5)],
+                      dailyUSD: [0, 1, 0, 2, 1, 1, 2, 0, 3, 1, 2, 1, 2, 1.5])],
     cacheHitRatio: 0.84, cacheSavedUSD: 22.3)
 
 func mockProviders() -> [ProviderUsage] {
@@ -424,6 +434,9 @@ func generate() async {
     write(png(CostSection(cost: mockCost, budget: 100, expanded: true)
         .padding(12).frame(width: 320)
         .background(Color(nsColor: .windowBackgroundColor))), "cost-budget.png")
+    write(png(CostSection(cost: mockCost, budget: 100, expanded: true, expandTopProject: true)
+        .padding(12).frame(width: 320)
+        .background(Color(nsColor: .windowBackgroundColor))), "cost-drilldown.png")
     write(png(CostSection(cost: mockCost, masked: true, expanded: true)
         .padding(12).frame(width: 320)
         .background(Color(nsColor: .windowBackgroundColor))), "cost-masked.png")

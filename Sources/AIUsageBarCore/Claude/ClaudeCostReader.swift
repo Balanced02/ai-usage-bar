@@ -22,18 +22,21 @@ public enum ClaudeCostReader {
         // Skip the (potentially large) full parse when nothing changed since the
         // last compute — the signature is just file paths + mtimes + sizes. The
         // version prefix invalidates the cache when the aggregation logic changes.
-        let signature = "v2|" + fileSignature(files)
+        let signature = "v3|" + fileSignature(files)
         let dayKey = Int(startOfToday.timeIntervalSince1970)
         if let cached = loadCache(dir: cacheDir, profileID: profile.id),
            cached.signature == signature, cached.day == dayKey {
             return cached.summary
         }
 
+        let dailyBuckets = 14                    // trailing days kept for the per-project trend line
         var seen = Set<String>()
         var totalTokens = 0
         var todayUSD = 0.0, monthUSD = 0.0, monthToDateUSD = 0.0
         var byModel: [String: (tokens: Int, usd: Double)] = [:]
-        var byRepo: [String: (tokens: Int, usd: Double)] = [:]
+        var repoAgg: [String: (tokens: Int, usd: Double)] = [:]
+        var repoModels: [String: [String: (tokens: Int, usd: Double)]] = [:]   // repo → model → totals
+        var repoDaily: [String: [Double]] = [:]                                 // repo → per-day $ (oldest→newest)
         var rawInput = 0, cacheCreation = 0, cacheRead = 0
         var cacheSavedUSD = 0.0
         var repoNames: [String: String] = [:]   // cwd → project name (memoized; resolving a worktree hits disk)
@@ -71,7 +74,15 @@ public enum ClaudeCostReader {
                 let m = byModel[mk] ?? (0, 0); byModel[mk] = (m.tokens + toks, m.usd + usd)
                 let cwd = obj["cwd"] as? String ?? ""
                 let rk = repoNames[cwd] ?? { let n = repoName(cwd); repoNames[cwd] = n; return n }()
-                let r = byRepo[rk] ?? (0, 0); byRepo[rk] = (r.tokens + toks, r.usd + usd)
+                var ra = repoAgg[rk] ?? (0, 0); ra.tokens += toks; ra.usd += usd; repoAgg[rk] = ra
+                var rm = repoModels[rk] ?? [:]
+                let cm = rm[mk] ?? (0, 0); rm[mk] = (cm.tokens + toks, cm.usd + usd); repoModels[rk] = rm
+                let daysAgo = cal.dateComponents([.day], from: cal.startOfDay(for: ts), to: startOfToday).day ?? 0
+                if daysAgo >= 0, daysAgo < dailyBuckets {
+                    var arr = repoDaily[rk] ?? [Double](repeating: 0, count: dailyBuckets)
+                    arr[dailyBuckets - 1 - daysAgo] += usd    // index 0 = oldest, last = today
+                    repoDaily[rk] = arr
+                }
 
                 rawInput += input; cacheCreation += cc; cacheRead += cr
                 let p = Pricing.price(for: model)
@@ -90,8 +101,13 @@ public enum ClaudeCostReader {
             totalTokens: totalTokens,
             byModel: byModel.map { ModelCost(model: $0.key, tokens: $0.value.tokens, usd: $0.value.usd) }
                 .sorted { $0.usd > $1.usd },
-            byRepo: byRepo.map { RepoCost(repo: $0.key, tokens: $0.value.tokens, usd: $0.value.usd) }
-                .sorted { $0.usd > $1.usd },
+            byRepo: repoAgg.map { repo, v in
+                RepoCost(repo: repo, tokens: v.tokens, usd: v.usd,
+                         byModel: (repoModels[repo] ?? [:])
+                             .map { ModelCost(model: $0.key, tokens: $0.value.tokens, usd: $0.value.usd) }
+                             .sorted { $0.usd > $1.usd },
+                         dailyUSD: repoDaily[repo] ?? [Double](repeating: 0, count: dailyBuckets))
+            }.sorted { $0.usd > $1.usd },
             cacheHitRatio: hit,
             cacheSavedUSD: cacheSavedUSD
         )
