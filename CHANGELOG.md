@@ -11,6 +11,16 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-13
+
+### Fixed
+- **Crash on launch on a fresh install.** `UsageNotifier.requestAuthorization()` used the
+  completion-handler notification API, whose callback fires on a background queue. Because the
+  notifier is `@MainActor`, Swift inserts a main-actor executor check at the closure's entry, which
+  trapped (`dispatch_assert_queue_fail`) whenever notification authorization was still undetermined —
+  i.e. on any clean install. Switched to the `async` authorization API. Did not surface locally
+  because authorization was already granted from a prior run.
+
 ## [0.1.0] - 2026-07-13
 
 First public release — every AI-coding limit in your menu bar.
@@ -37,5 +47,6 @@ First public release — every AI-coding limit in your menu bar.
 - **Settings window** — refresh cadence, menu-bar style, budget, notifications,
   provider toggles, and data-location roots.
 
-[Unreleased]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Balanced02/ai-usage-bar/releases/tag/v0.1.0
