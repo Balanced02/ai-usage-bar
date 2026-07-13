@@ -199,20 +199,6 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(ClaudeCostReader.repoName(""), "unknown")
     }
 
-    func testRepoNameResolvesGitWorktreeToMainRepo() throws {
-        // A real git worktree has a `.git` FILE pointing at <main>/.git/worktrees/<name>.
-        let fm = FileManager.default
-        let root = fm.temporaryDirectory.appendingPathComponent("wt-\(UUID().uuidString)")
-        let wt = root.appendingPathComponent("scratch/feature-xyz-9f1c2b")
-        try fm.createDirectory(at: wt, withIntermediateDirectories: true)
-        let mainRepo = root.appendingPathComponent("my-project")
-        try "gitdir: \(mainRepo.path)/.git/worktrees/feature-xyz-9f1c2b\n"
-            .write(to: wt.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
-
-        XCTAssertEqual(ClaudeCostReader.repoName(wt.path), "my-project")
-        try? fm.removeItem(at: root)
-    }
-
     func testClaudeCostReaderUsesCacheUntilFilesChange() throws {
         let fm = FileManager.default
         let home = fm.temporaryDirectory.appendingPathComponent("costcache-\(UUID().uuidString)")

@@ -22,7 +22,7 @@ public enum ClaudeCostReader {
         // Skip the (potentially large) full parse when nothing changed since the
         // last compute — the signature is just file paths + mtimes + sizes. The
         // version prefix invalidates the cache when the aggregation logic changes.
-        let signature = "v3|" + fileSignature(files)
+        let signature = "v4|" + fileSignature(files)
         let dayKey = Int(startOfToday.timeIntervalSince1970)
         if let cached = loadCache(dir: cacheDir, profileID: profile.id),
            cached.signature == signature, cached.day == dayKey {
@@ -39,7 +39,7 @@ public enum ClaudeCostReader {
         var repoDaily: [String: [Double]] = [:]                                 // repo → per-day $ (oldest→newest)
         var rawInput = 0, cacheCreation = 0, cacheRead = 0
         var cacheSavedUSD = 0.0
-        var repoNames: [String: String] = [:]   // cwd → project name (memoized; resolving a worktree hits disk)
+        var repoNames: [String: String] = [:]   // cwd → project name (memoized string parse)
 
         for file in files {
             if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > maxFileBytes { continue }
@@ -162,17 +162,15 @@ public enum ClaudeCostReader {
     }
 
     /// The project name for a working directory — collapsing git worktrees to the
-    /// repo they belong to, so cost aggregates by project, not by worktree.
+    /// project they belong to, so cost aggregates by project, not by worktree.
+    ///
+    /// Purely string-based: it must NOT touch the filesystem. `cwd` points into the
+    /// user's own project folders (e.g. `~/Documents`), and stat-ing anything there
+    /// would trigger a macOS "access your Documents folder" prompt — which a menu-bar
+    /// usage app has no business doing. The path markers below cover Claude Code's
+    /// `.claude/worktrees/` layout (and similar) without opening a single file.
     static func repoName(_ cwd: String?) -> String {
         guard let cwd, !cwd.isEmpty else { return "unknown" }
-
-        // Most accurate: a git worktree's `.git` is a FILE pointing at the main repo.
-        if let main = gitMainRepo(forWorktreeAt: cwd) {
-            let name = (main as NSString).lastPathComponent
-            if !name.isEmpty { return name }
-        }
-
-        // Fallback: recognise common worktree directory layouts by path.
         var p = cwd
         for marker in ["/.claude/worktrees/", "/.git/worktrees/", "/worktrees/", "--claude-worktrees"] {
             if let r = p.range(of: marker) {
@@ -185,19 +183,5 @@ public enum ClaudeCostReader {
         }
         let name = (p as NSString).lastPathComponent
         return name.isEmpty ? "unknown" : name
-    }
-
-    /// If `cwd` is a git worktree, returns its main repo path (via the `.git` file's
-    /// `gitdir: <main>/.git/worktrees/<name>` pointer); nil for a normal checkout.
-    static func gitMainRepo(forWorktreeAt cwd: String) -> String? {
-        let dotGit = (cwd as NSString).appendingPathComponent(".git")
-        guard let type = (try? FileManager.default.attributesOfItem(atPath: dotGit))?[.type] as? FileAttributeType,
-              type == .typeRegular,
-              let content = try? String(contentsOfFile: dotGit, encoding: .utf8),
-              let line = content.split(whereSeparator: \.isNewline).first(where: { $0.hasPrefix("gitdir:") })
-        else { return nil }
-        var gitdir = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
-        if let r = gitdir.range(of: "/.git/worktrees/") { gitdir = String(gitdir[..<r.lowerBound]) }
-        return gitdir.isEmpty ? nil : gitdir
     }
 }
