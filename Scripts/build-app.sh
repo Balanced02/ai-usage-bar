@@ -10,9 +10,18 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 APP_NAME="AIUsageBar"
 BUNDLE_ID="com.aiusagebar.AIUsageBar"
-VERSION="0.1.0"
+VERSION="${VERSION:-0.1.0}"                       # CI passes the tag (e.g. 1.2.3)
 APP="$ROOT/dist/$APP_NAME.app"
 CONFIG="release"
+
+# Signing + auto-update config — all optional; sensible defaults keep local
+# builds ad-hoc signed and update-inert until you supply real values.
+#   SIGN_IDENTITY        "Developer ID Application: Name (TEAMID)"  (default: - = ad-hoc)
+#   SPARKLE_FEED_URL     appcast URL baked into Info.plist
+#   SPARKLE_PUBLIC_KEY   base64 EdDSA public key (from Sparkle's generate_keys)
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://balanced02.github.io/ai-usage-bar/appcast.xml}"
+SPARKLE_PUBLIC_KEY="${SPARKLE_PUBLIC_KEY:-}"
 
 echo "▸ swift build -c $CONFIG"
 swift build -c "$CONFIG"
@@ -42,6 +51,14 @@ if [ -f "$ICON_PNG" ]; then
     iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" && echo "  ✓ AppIcon.icns"
 fi
 
+SPARKLE_KEYS="    <key>SUFeedURL</key><string>$SPARKLE_FEED_URL</string>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SUScheduledCheckInterval</key><integer>86400</integer>"
+if [ -n "$SPARKLE_PUBLIC_KEY" ]; then
+    SPARKLE_KEYS="$SPARKLE_KEYS
+    <key>SUPublicEDKey</key><string>$SPARKLE_PUBLIC_KEY</string>"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -59,13 +76,51 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSSupportsAutomaticTermination</key><false/>
+$SPARKLE_KEYS
 </dict>
 </plist>
 PLIST
 
-echo "▸ ad-hoc code signing"
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || \
-    echo "  (codesign warning ignored — ad-hoc)"
+echo "▸ embedding Sparkle.framework"
+FRAMEWORKS="$APP/Contents/Frameworks"
+mkdir -p "$FRAMEWORKS"
+# Match both the unified (.build/out/Products/Release) and classic (.build/release)
+# layouts. The binary has a REQUIRED load command for Sparkle, so a missing
+# framework would ship an app that crashes at launch — fail hard instead.
+SPARKLE_FW="$(find "$ROOT/.build" -name Sparkle.framework -type d 2>/dev/null | grep -iE '/(release|products/release)/' | head -1)"
+if [ -z "$SPARKLE_FW" ]; then
+    echo "✗ Sparkle.framework not found under .build — run 'swift build -c $CONFIG' first." >&2
+    exit 1
+fi
+cp -R "$SPARKLE_FW" "$FRAMEWORKS/"
+# The binary loads @rpath/Sparkle.framework/… — point @rpath at Contents/Frameworks.
+install_name_tool -add_rpath "@executable_path/../Frameworks" \
+    "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
+
+# Code signing. Ad-hoc by default (SIGN_IDENTITY=-); a real Developer ID identity
+# adds hardened runtime + a secure timestamp so the build can be notarized. Sign
+# inside-out: nested helpers → framework → app.
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    echo "▸ ad-hoc code signing"
+    RUNTIME=""
+else
+    echo "▸ code signing as: $SIGN_IDENTITY (hardened runtime)"
+    RUNTIME="--options runtime --timestamp"
+fi
+
+# $RUNTIME is intentionally unquoted so its flags word-split (empty → nothing).
+# stderr is NOT suppressed and failures are NOT swallowed: a real signing failure
+# (locked keychain, missing identity, timestamp-server timeout) must surface and
+# abort under `set -e`, never report a false success on a mis-signed app.
+sign() { codesign --force $RUNTIME --sign "$SIGN_IDENTITY" "$@"; }
+SPV="$FRAMEWORKS/Sparkle.framework/Versions/B"
+if [ -d "$SPV" ]; then
+    for x in "$SPV/XPCServices/"*.xpc; do [ -e "$x" ] && sign "$x"; done
+    [ -e "$SPV/Autoupdate" ] && sign "$SPV/Autoupdate"
+    [ -e "$SPV/Updater.app" ] && sign "$SPV/Updater.app"
+    sign "$FRAMEWORKS/Sparkle.framework"
+fi
+sign "$APP"
 
 echo "✓ built $APP"
 

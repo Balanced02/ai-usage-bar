@@ -11,6 +11,10 @@ let package = Package(
         .executable(name: "AIUsageBar", targets: ["AIUsageBar"]),
         .executable(name: "usageprobe", targets: ["usageprobe"]),
     ],
+    dependencies: [
+        // Auto-update. Linked into the app target only — Core/UI stay dependency-free.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    ],
     targets: [
         .target(
             name: "AIUsageBarCore"
@@ -21,7 +25,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "AIUsageBar",
-            dependencies: ["AIUsageBarUI", "AIUsageBarCore"]
+            dependencies: ["AIUsageBarUI", "AIUsageBarCore", .product(name: "Sparkle", package: "Sparkle")]
         ),
         .executableTarget(
             name: "previewgen",
@@ -40,7 +44,11 @@ let package = Package(
         ),
         .testTarget(
             name: "AIUsageBarUITests",
-            dependencies: ["AIUsageBar", "AIUsageBarUI", "AIUsageBarCore"]
+            dependencies: ["AIUsageBar", "AIUsageBarUI", "AIUsageBarCore"],
+            // This bundle transitively links Sparkle (via the app target). SPM leaves
+            // Sparkle.framework in the products dir, three levels above the xctest
+            // binary — add that as an rpath so @rpath/Sparkle.framework resolves.
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@loader_path/../../.."])]
         ),
     ]
 )

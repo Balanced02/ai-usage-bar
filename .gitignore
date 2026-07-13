@@ -1,7 +1,8 @@
 # Swift / SwiftPM
 .build/
 .swiftpm/
-Package.resolved
+# Package.resolved IS committed — pins Sparkle (a security-critical binary dep)
+# for reproducible CI + release builds.
 
 # Xcode
 *.xcodeproj/xcuserdata/

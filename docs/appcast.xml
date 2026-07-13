@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>AI Usage Bar</title>
+    <link>https://balanced02.github.io/ai-usage-bar/appcast.xml</link>
+    <description>Auto-update feed for AI Usage Bar.</description>
+    <language>en</language>
+
+    <!-- Add one <item> per release. Fill edSignature + length from the Release
+         workflow's "Sign update for Sparkle" step output.
+    <item>
+      <title>0.1.0</title>
+      <pubDate>Mon, 13 Jul 2026 12:00:00 +0000</pubDate>
+      <sparkle:version>0.1.0</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.1.0/AIUsageBar-v0.1.0.zip"
+        sparkle:edSignature="PASTE_ED_SIGNATURE"
+        length="PASTE_BYTE_LENGTH"
+        type="application/octet-stream" />
+    </item>
+    -->
+  </channel>
+</rss>

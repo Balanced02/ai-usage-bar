@@ -1,29 +1,140 @@
 name: Release
 
+# Cut a release by pushing a tag: `git tag v1.2.3 && git push origin v1.2.3`.
+# Everything degrades gracefully: with no secrets you still get an ad-hoc build +
+# GitHub Release. Add the secrets documented in docs/RELEASING.md to unlock
+# Developer ID notarization, Sparkle auto-update, and the Homebrew cask bump.
+
 on:
   push:
     tags: ['v*']
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # Which optional capabilities are configured? (Secrets can't be used in `if:`
+      # directly, so surface their presence as booleans here.)
+      - name: Detect capabilities
+        id: caps
+        env:
+          CERT: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          [ -n "$CERT" ] && echo "sign=true" >> "$GITHUB_OUTPUT" || echo "sign=false" >> "$GITHUB_OUTPUT"
+          [ -n "$SPARKLE_KEY" ] && echo "sparkle=true" >> "$GITHUB_OUTPUT" || echo "sparkle=false" >> "$GITHUB_OUTPUT"
+
+      - name: Import Developer ID certificate
+        if: steps.caps.outputs.sign == 'true'
+        env:
+          CERT_P12: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          CERT_PW: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p actions "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p actions "$KEYCHAIN"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PW" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
 
       - name: Build app bundle
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          SIGN_IDENTITY: ${{ steps.caps.outputs.sign == 'true' && secrets.APPLE_SIGN_IDENTITY || '-' }}
+          SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_KEY }}
         run: Scripts/build-app.sh
 
-      - name: Zip .app
-        run: ditto -c -k --keepParent dist/AIUsageBar.app "dist/AIUsageBar-${GITHUB_REF_NAME}.zip"
+      - name: Notarize & staple
+        if: steps.caps.outputs.sign == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent dist/AIUsageBar.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple dist/AIUsageBar.app
 
-      - name: Publish release
+      - name: Package zip + dmg
+        run: |
+          mkdir -p dist/artifacts
+          ZIP="dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.zip"
+          ditto -c -k --keepParent dist/AIUsageBar.app "$ZIP"
+          hdiutil create -volname "AI Usage Bar" -srcfolder dist/AIUsageBar.app \
+            -ov -format UDZO "dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.dmg"
+          echo "SHA256=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          awk -v ver="${{ steps.v.outputs.version }}" '
+            $0 ~ "^## \\[" ver "\\]" {grab=1; next}
+            grab && /^## \[/ {exit}
+            grab {print}
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "Release ${GITHUB_REF_NAME}." > "$RUNNER_TEMP/notes.md"
+          fi
+          if [ "${{ steps.caps.outputs.sign }}" != "true" ]; then
+            printf '\n---\n_Ad-hoc signed build. First launch: right-click the app → **Open**, or `xattr -dr com.apple.quarantine AIUsageBar.app`._\n' >> "$RUNNER_TEMP/notes.md"
+          fi
+
+      - name: Sign update for Sparkle
+        if: steps.caps.outputs.sparkle == 'true'
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          # sign_update ships inside the resolved Sparkle SPM artifact (populated by
+          # the earlier build), so no version-matched download is needed.
+          SIGN_TOOL="$(find .build/artifacts -path '*sparkle*/bin/sign_update' | head -1)"
+          SIG=$("$SIGN_TOOL" "dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.zip" \
+                  --ed-key-file <(printf '%s' "$SPARKLE_PRIVATE_KEY"))
+          echo "Sparkle signature for this build: $SIG"
+          echo "Add an <item> with it to docs/appcast.xml — see docs/RELEASING.md."
+
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            "dist/AIUsageBar-${GITHUB_REF_NAME}.zip" \
+            "dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.zip" \
+            "dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.dmg" \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Ad-hoc signed build (no Apple Developer ID yet). On first launch, right-click the app → **Open**, or run \`xattr -dr com.apple.quarantine AIUsageBar.app\`. Then move it to /Applications and enable Launch at login."
+            --notes-file "$RUNNER_TEMP/notes.md"
+
+      # Open a PR that bumps the Homebrew cask (respects branch protection on main).
+      - name: Bump Homebrew cask
+        if: hashFiles('Casks/ai-usage-bar.rb') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BR="cask-bump-${GITHUB_REF_NAME}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BR"
+          # The cask url self-templates on #{version}; only version + sha256 change.
+          /usr/bin/sed -i '' \
+            -e "s|^  version .*|  version \"${{ steps.v.outputs.version }}\"|" \
+            -e "s|^  sha256 .*|  sha256 \"${SHA256}\"|" \
+            Casks/ai-usage-bar.rb
+          git commit -am "chore(cask): AI Usage Bar ${GITHUB_REF_NAME}"
+          git push origin "$BR"
+          gh pr create --base main --head "$BR" \
+            --title "chore(cask): bump to ${GITHUB_REF_NAME}" \
+            --body "Automated Homebrew cask bump for ${GITHUB_REF_NAME} (sha256 \`${SHA256}\`)."
