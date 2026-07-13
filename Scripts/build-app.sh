@@ -84,15 +84,18 @@ PLIST
 echo "▸ embedding Sparkle.framework"
 FRAMEWORKS="$APP/Contents/Frameworks"
 mkdir -p "$FRAMEWORKS"
-SPARKLE_FW="$(find "$ROOT/.build" -path '*/Products/Release/Sparkle.framework' -type d 2>/dev/null | head -1)"
-if [ -n "$SPARKLE_FW" ]; then
-    cp -R "$SPARKLE_FW" "$FRAMEWORKS/"
-    # The binary loads @rpath/Sparkle.framework/… — point @rpath at Contents/Frameworks.
-    install_name_tool -add_rpath "@executable_path/../Frameworks" \
-        "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
-else
-    echo "  ! Sparkle.framework not found in .build — did 'swift build -c release' run?" >&2
+# Match both the unified (.build/out/Products/Release) and classic (.build/release)
+# layouts. The binary has a REQUIRED load command for Sparkle, so a missing
+# framework would ship an app that crashes at launch — fail hard instead.
+SPARKLE_FW="$(find "$ROOT/.build" -name Sparkle.framework -type d 2>/dev/null | grep -iE '/(release|products/release)/' | head -1)"
+if [ -z "$SPARKLE_FW" ]; then
+    echo "✗ Sparkle.framework not found under .build — run 'swift build -c $CONFIG' first." >&2
+    exit 1
 fi
+cp -R "$SPARKLE_FW" "$FRAMEWORKS/"
+# The binary loads @rpath/Sparkle.framework/… — point @rpath at Contents/Frameworks.
+install_name_tool -add_rpath "@executable_path/../Frameworks" \
+    "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
 
 # Code signing. Ad-hoc by default (SIGN_IDENTITY=-); a real Developer ID identity
 # adds hardened runtime + a secure timestamp so the build can be notarized. Sign
@@ -106,7 +109,10 @@ else
 fi
 
 # $RUNTIME is intentionally unquoted so its flags word-split (empty → nothing).
-sign() { codesign --force $RUNTIME --sign "$SIGN_IDENTITY" "$@" 2>/dev/null; }
+# stderr is NOT suppressed and failures are NOT swallowed: a real signing failure
+# (locked keychain, missing identity, timestamp-server timeout) must surface and
+# abort under `set -e`, never report a false success on a mis-signed app.
+sign() { codesign --force $RUNTIME --sign "$SIGN_IDENTITY" "$@"; }
 SPV="$FRAMEWORKS/Sparkle.framework/Versions/B"
 if [ -d "$SPV" ]; then
     for x in "$SPV/XPCServices/"*.xpc; do [ -e "$x" ] && sign "$x"; done
@@ -114,7 +120,7 @@ if [ -d "$SPV" ]; then
     [ -e "$SPV/Updater.app" ] && sign "$SPV/Updater.app"
     sign "$FRAMEWORKS/Sparkle.framework"
 fi
-sign "$APP" || echo "  (codesign warning ignored)"
+sign "$APP"
 
 echo "✓ built $APP"
 
