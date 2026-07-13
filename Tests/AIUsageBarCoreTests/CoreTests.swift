@@ -168,11 +168,44 @@ final class CoreTests: XCTestCase {
         try (opus + "\n" + sonnet + "\n" + opus + "\n")
             .write(to: projects.appendingPathComponent("s.jsonl"), atomically: true, encoding: .utf8)
 
-        let cost = try XCTUnwrap(ClaudeCostReader.summary(for: .custom(name: "Test", dir: home.path)))
+        let cost = try XCTUnwrap(ClaudeCostReader.summary(for: .custom(name: "Test", dir: home.path), cacheDirectory: home))
         XCTAssertEqual(cost.monthUSD, 0.0555 + 0.021, accuracy: 1e-6)   // opus + sonnet
         XCTAssertEqual(cost.totalTokens, 3500 + 3000)                    // opus counted once
         XCTAssertEqual(cost.byModel.first?.model, "Opus")               // sorted by $ desc
         XCTAssertEqual(Set(cost.byRepo.map(\.repo)), ["api-server", "web-app"])
+
+        try? fm.removeItem(at: home)
+    }
+
+    func testClaudeCostReaderUsesCacheUntilFilesChange() throws {
+        let fm = FileManager.default
+        let home = fm.temporaryDirectory.appendingPathComponent("costcache-\(UUID().uuidString)")
+        let projects = home.appendingPathComponent("projects/slug")
+        try fm.createDirectory(at: projects, withIntermediateDirectories: true)
+        let recent = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
+        let file = projects.appendingPathComponent("s.jsonl")
+        let msg = "{\"type\":\"assistant\",\"timestamp\":\"\(recent)\",\"requestId\":\"1\",\"cwd\":\"/Users/x/api-server\",\"message\":{\"id\":\"m1\",\"model\":\"claude-opus-4-8\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}}"
+        try (msg + "\n").write(to: file, atomically: true, encoding: .utf8)
+        let profile = ClaudeProfile.custom(name: "Test", dir: home.path)
+
+        // First compute parses and writes a cache file.
+        let first = try XCTUnwrap(ClaudeCostReader.summary(for: profile, cacheDirectory: home))
+        XCTAssertEqual(first.totalTokens, 1000)
+        let cacheName = try XCTUnwrap(fm.contentsOfDirectory(atPath: home.path).first { $0.hasPrefix("cost-cache-") })
+        let cacheURL = home.appendingPathComponent(cacheName)
+
+        // Tamper the cached summary but keep its signature/day → a cache HIT returns it.
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: cacheURL)) as? [String: Any])
+        var summary = try XCTUnwrap(json["summary"] as? [String: Any])
+        summary["totalTokens"] = 999_999
+        json["summary"] = summary
+        try JSONSerialization.data(withJSONObject: json).write(to: cacheURL)
+        XCTAssertEqual(try ClaudeCostReader.summary(for: profile, cacheDirectory: home)?.totalTokens, 999_999)
+
+        // Changing the file invalidates the signature (size differs) → recompute.
+        let handle = try FileHandle(forWritingTo: file)
+        handle.seekToEndOfFile(); handle.write(Data(" \n".utf8)); try handle.close()
+        XCTAssertEqual(try ClaudeCostReader.summary(for: profile, cacheDirectory: home)?.totalTokens, 1000)
 
         try? fm.removeItem(at: home)
     }

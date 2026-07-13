@@ -7,15 +7,26 @@ public enum ClaudeCostReader {
     public static func summary(for profile: ClaudeProfile,
                                now: Date = Date(),
                                maxFiles: Int = 400,
-                               maxFileBytes: Int = 40_000_000) -> CostSummary? {
+                               maxFileBytes: Int = 40_000_000,
+                               cacheDirectory: URL? = nil) -> CostSummary? {
         let projects = profile.projectsDir
         guard FileManager.default.fileExists(atPath: projects.path) else { return nil }
+        let cacheDir = cacheDirectory ?? UsageHistory.defaultDirectory()
 
         let cutoff30 = now.addingTimeInterval(-30 * 24 * 3600)
         let cal = Calendar.current
         let startOfToday = cal.startOfDay(for: now)
         let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? startOfToday
         let files = ClaudeJSONLReader.recentJSONL(in: projects, modifiedAfter: cutoff30, limit: maxFiles)
+
+        // Skip the (potentially large) full parse when nothing changed since the
+        // last compute — the signature is just file paths + mtimes + sizes.
+        let signature = fileSignature(files)
+        let dayKey = Int(startOfToday.timeIntervalSince1970)
+        if let cached = loadCache(dir: cacheDir, profileID: profile.id),
+           cached.signature == signature, cached.day == dayKey {
+            return cached.summary
+        }
 
         var seen = Set<String>()
         var totalTokens = 0
@@ -69,7 +80,7 @@ public enum ClaudeCostReader {
         let denom = rawInput + cacheCreation + cacheRead
         let hit = denom > 0 ? Double(cacheRead) / Double(denom) : nil
 
-        return CostSummary(
+        let summary = CostSummary(
             todayUSD: todayUSD,
             monthUSD: monthUSD,
             monthToDateUSD: monthToDateUSD,
@@ -81,6 +92,46 @@ public enum ClaudeCostReader {
             cacheHitRatio: hit,
             cacheSavedUSD: cacheSavedUSD
         )
+        saveCache(dir: cacheDir, profileID: profile.id, signature: signature, day: dayKey, summary: summary)
+        return summary
+    }
+
+    // MARK: Persistent cache
+
+    private struct CachedCost: Codable {
+        var signature: String
+        var day: Int
+        var summary: CostSummary
+    }
+
+    /// A cheap fingerprint of the input files (paths + mtimes + sizes) — changes
+    /// whenever a session file is written, added, or ages out of the 30-day window.
+    private static func fileSignature(_ files: [URL]) -> String {
+        files.map { url -> String in
+            let v = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+            let m = Int(v?.contentModificationDate?.timeIntervalSince1970 ?? 0)
+            let s = v?.fileSize ?? 0
+            return "\(url.path):\(m):\(s)"
+        }
+        .sorted()
+        .joined(separator: "|")
+    }
+
+    private static func cacheURL(dir: URL, profileID: String) -> URL {
+        let safe = profileID.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
+        return dir.appendingPathComponent("cost-cache-\(safe).json")
+    }
+
+    private static func loadCache(dir: URL, profileID: String) -> CachedCost? {
+        guard let data = try? Data(contentsOf: cacheURL(dir: dir, profileID: profileID)) else { return nil }
+        return try? JSONDecoder().decode(CachedCost.self, from: data)
+    }
+
+    private static func saveCache(dir: URL, profileID: String, signature: String, day: Int, summary: CostSummary) {
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(CachedCost(signature: signature, day: day, summary: summary)) {
+            try? data.write(to: cacheURL(dir: dir, profileID: profileID))
+        }
     }
 
     static func shortModel(_ model: String?) -> String {
