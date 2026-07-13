@@ -103,7 +103,7 @@ need an Apple Developer ID + notarization.
 
 ## Settings
 
-Click the gear in the panel to open **Settings**. **General** manages refresh cadence,
+Click the gear in the panel to open the **Settings window**. **General** manages refresh cadence,
 menu-bar style, monthly budget, notifications, **Mask account details**, and launch at login;
 **Providers** enables or disables each service; **Data locations** selects provider
 configuration roots. Choose the Codex or Gemini configuration-root folder (usually
