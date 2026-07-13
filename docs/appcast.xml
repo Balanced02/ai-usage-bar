@@ -11,6 +11,19 @@
     <!-- Newest release first. Fill edSignature + length from the Release
          workflow's "Sign update for Sparkle" step output. -->
     <item>
+      <title>0.1.1</title>
+      <pubDate>Mon, 13 Jul 2026 13:33:16 +0000</pubDate>
+      <sparkle:version>0.1.1</sparkle:version>
+      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[Fixes a crash on launch on a fresh install.]]></description>
+      <enclosure
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.1.1/AIUsageBar-v0.1.1.zip"
+        sparkle:edSignature="Vwf53R3C5Dkax2vceue9LccjEKBUQY30jqCLJWxl9H/t5VPONd6BwQ4N9A1v2BflL+xeX25oDVsJE89A2uASAg=="
+        length="2047304"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>0.1.0</title>
       <pubDate>Mon, 13 Jul 2026 13:08:02 +0000</pubDate>
       <sparkle:version>0.1.0</sparkle:version>
