@@ -22,8 +22,15 @@ public final class UsageNotifier {
 
     public func requestAuthorization() {
         guard available else { return }
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            Task { @MainActor in self.authorized = granted }
+        // Use the async API, not the completion-handler overload: this type is
+        // @MainActor, so a captured-self completion closure gets a main-actor
+        // runtime check at its entry — and UNUserNotificationCenter fires that
+        // callback on a background queue, which traps (dispatch_assert_queue_fail)
+        // on a fresh install where authorization is still undetermined.
+        Task { @MainActor in
+            let granted = (try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound])) ?? false
+            self.authorized = granted
         }
     }
 
