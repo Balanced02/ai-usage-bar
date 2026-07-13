@@ -177,6 +177,33 @@ final class CoreTests: XCTestCase {
         try? fm.removeItem(at: home)
     }
 
+    func testRepoNameCollapsesWorktreesToProject() throws {
+        // Plain checkout → its own folder name.
+        XCTAssertEqual(ClaudeCostReader.repoName("/Users/x/Documents/ai-usage-bar"), "ai-usage-bar")
+        // Claude Code worktree layout → the project, not the <branch>-<hash> leaf.
+        XCTAssertEqual(ClaudeCostReader.repoName("/Users/x/proj/.claude/worktrees/admin-marketing-e5a1dd"), "proj")
+        // A worktrees dir nested under a container folder collapses past it.
+        XCTAssertEqual(ClaudeCostReader.repoName("/Users/x/proj/_private/worktrees/compliance"), "proj")
+        // Legacy sibling layout.
+        XCTAssertEqual(ClaudeCostReader.repoName("/Users/x/proj--claude-worktrees/branch-abc"), "proj")
+        XCTAssertEqual(ClaudeCostReader.repoName(nil), "unknown")
+        XCTAssertEqual(ClaudeCostReader.repoName(""), "unknown")
+    }
+
+    func testRepoNameResolvesGitWorktreeToMainRepo() throws {
+        // A real git worktree has a `.git` FILE pointing at <main>/.git/worktrees/<name>.
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("wt-\(UUID().uuidString)")
+        let wt = root.appendingPathComponent("scratch/feature-xyz-9f1c2b")
+        try fm.createDirectory(at: wt, withIntermediateDirectories: true)
+        let mainRepo = root.appendingPathComponent("my-project")
+        try "gitdir: \(mainRepo.path)/.git/worktrees/feature-xyz-9f1c2b\n"
+            .write(to: wt.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(ClaudeCostReader.repoName(wt.path), "my-project")
+        try? fm.removeItem(at: root)
+    }
+
     func testClaudeCostReaderUsesCacheUntilFilesChange() throws {
         let fm = FileManager.default
         let home = fm.temporaryDirectory.appendingPathComponent("costcache-\(UUID().uuidString)")

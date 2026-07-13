@@ -20,8 +20,9 @@ public enum ClaudeCostReader {
         let files = ClaudeJSONLReader.recentJSONL(in: projects, modifiedAfter: cutoff30, limit: maxFiles)
 
         // Skip the (potentially large) full parse when nothing changed since the
-        // last compute — the signature is just file paths + mtimes + sizes.
-        let signature = fileSignature(files)
+        // last compute — the signature is just file paths + mtimes + sizes. The
+        // version prefix invalidates the cache when the aggregation logic changes.
+        let signature = "v2|" + fileSignature(files)
         let dayKey = Int(startOfToday.timeIntervalSince1970)
         if let cached = loadCache(dir: cacheDir, profileID: profile.id),
            cached.signature == signature, cached.day == dayKey {
@@ -35,6 +36,7 @@ public enum ClaudeCostReader {
         var byRepo: [String: (tokens: Int, usd: Double)] = [:]
         var rawInput = 0, cacheCreation = 0, cacheRead = 0
         var cacheSavedUSD = 0.0
+        var repoNames: [String: String] = [:]   // cwd → project name (memoized; resolving a worktree hits disk)
 
         for file in files {
             if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > maxFileBytes { continue }
@@ -67,7 +69,8 @@ public enum ClaudeCostReader {
 
                 let mk = shortModel(model)
                 let m = byModel[mk] ?? (0, 0); byModel[mk] = (m.tokens + toks, m.usd + usd)
-                let rk = repoName(obj["cwd"] as? String)
+                let cwd = obj["cwd"] as? String ?? ""
+                let rk = repoNames[cwd] ?? { let n = repoName(cwd); repoNames[cwd] = n; return n }()
                 let r = byRepo[rk] ?? (0, 0); byRepo[rk] = (r.tokens + toks, r.usd + usd)
 
                 rawInput += input; cacheCreation += cc; cacheRead += cr
@@ -142,11 +145,43 @@ public enum ClaudeCostReader {
         return "Other"
     }
 
-    /// Collapse worktrees and take the repo folder name from a cwd path.
+    /// The project name for a working directory — collapsing git worktrees to the
+    /// repo they belong to, so cost aggregates by project, not by worktree.
     static func repoName(_ cwd: String?) -> String {
-        guard var p = cwd, !p.isEmpty else { return "unknown" }
-        if let r = p.range(of: "--claude-worktrees") { p = String(p[..<r.lowerBound]) }
+        guard let cwd, !cwd.isEmpty else { return "unknown" }
+
+        // Most accurate: a git worktree's `.git` is a FILE pointing at the main repo.
+        if let main = gitMainRepo(forWorktreeAt: cwd) {
+            let name = (main as NSString).lastPathComponent
+            if !name.isEmpty { return name }
+        }
+
+        // Fallback: recognise common worktree directory layouts by path.
+        var p = cwd
+        for marker in ["/.claude/worktrees/", "/.git/worktrees/", "/worktrees/", "--claude-worktrees"] {
+            if let r = p.range(of: marker) {
+                p = String(p[..<r.lowerBound])
+                for container in ["/_private", "/.claude", "/.git"] where p.hasSuffix(container) {
+                    p = String(p.dropLast(container.count))
+                }
+                break
+            }
+        }
         let name = (p as NSString).lastPathComponent
         return name.isEmpty ? "unknown" : name
+    }
+
+    /// If `cwd` is a git worktree, returns its main repo path (via the `.git` file's
+    /// `gitdir: <main>/.git/worktrees/<name>` pointer); nil for a normal checkout.
+    static func gitMainRepo(forWorktreeAt cwd: String) -> String? {
+        let dotGit = (cwd as NSString).appendingPathComponent(".git")
+        guard let type = (try? FileManager.default.attributesOfItem(atPath: dotGit))?[.type] as? FileAttributeType,
+              type == .typeRegular,
+              let content = try? String(contentsOfFile: dotGit, encoding: .utf8),
+              let line = content.split(whereSeparator: \.isNewline).first(where: { $0.hasPrefix("gitdir:") })
+        else { return nil }
+        var gitdir = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
+        if let r = gitdir.range(of: "/.git/worktrees/") { gitdir = String(gitdir[..<r.lowerBound]) }
+        return gitdir.isEmpty ? nil : gitdir
     }
 }
