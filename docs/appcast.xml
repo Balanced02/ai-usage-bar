@@ -9,30 +9,19 @@
     <language>en</language>
 
     <!-- Newest release first. Fill edSignature + length from the Release
-         workflow's "Sign update for Sparkle" step output. -->
+         workflow's "Sign update for Sparkle" step output. Older buggy builds
+         (0.1.0–0.1.3) are intentionally omitted so every client updates to 0.1.4+. -->
     <item>
-      <title>0.1.1</title>
-      <pubDate>Mon, 13 Jul 2026 13:33:16 +0000</pubDate>
-      <sparkle:version>0.1.1</sparkle:version>
-      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+      <title>0.1.4</title>
+      <pubDate>Mon, 13 Jul 2026 21:59:14 +0000</pubDate>
+      <sparkle:version>0.1.4</sparkle:version>
+      <sparkle:shortVersionString>0.1.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[Fixes a crash on launch on a fresh install.]]></description>
+      <description><![CDATA[Fixes a launch crash on fresh installs and removes an unnecessary "access your Documents folder" prompt.]]></description>
       <enclosure
-        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.1.1/AIUsageBar-v0.1.1.zip"
-        sparkle:edSignature="Vwf53R3C5Dkax2vceue9LccjEKBUQY30jqCLJWxl9H/t5VPONd6BwQ4N9A1v2BflL+xeX25oDVsJE89A2uASAg=="
-        length="2047304"
-        type="application/octet-stream" />
-    </item>
-    <item>
-      <title>0.1.0</title>
-      <pubDate>Mon, 13 Jul 2026 13:08:02 +0000</pubDate>
-      <sparkle:version>0.1.0</sparkle:version>
-      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <enclosure
-        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.1.0/AIUsageBar-v0.1.0.zip"
-        sparkle:edSignature="RP6z/UVTIoFXhHMuJpwAh0Gdzmw0rGsHK/cC28Ler3zd102SzoXgc5yXlvWpAeLAaGPIS4AlVzOT5NtkDY3dBw=="
-        length="2046756"
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.1.4/AIUsageBar-v0.1.4.zip"
+        sparkle:edSignature="mPeqh+MRI68gMi+0uUlnH1byKFiECrncOCNW/beK6kBADuVylSg9uxpu7BZE7YumF5uuG9NjM5584hOXbH5BCQ=="
+        length="2042442"
         type="application/octet-stream" />
     </item>
   </channel>
