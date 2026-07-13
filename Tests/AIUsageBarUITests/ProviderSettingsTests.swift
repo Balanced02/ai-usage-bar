@@ -1,9 +1,51 @@
+import AppKit
 import Foundation
 import XCTest
 import AIUsageBarCore
+@testable import AIUsageBar
 @testable import AIUsageBarUI
 
 final class ProviderSettingsTests: XCTestCase {
+    @MainActor
+    func testSettingsCloseCreatesFreshSessionButVisibleOpenKeepsCurrentSession() {
+        let delegate = AppDelegate()
+
+        delegate.showSettings()
+        guard let firstWindow = settingsWindow() else {
+            XCTFail("Settings window should be visible after opening")
+            return
+        }
+        guard let firstSession = firstWindow.contentViewController else {
+            XCTFail("Settings window should have a hosting controller")
+            return
+        }
+
+        delegate.showSettings()
+        guard let visibleSession = settingsWindow()?.contentViewController else {
+            XCTFail("Settings window should stay visible when reopened")
+            return
+        }
+        XCTAssertTrue(firstSession === visibleSession)
+
+        firstWindow.close()
+        delegate.showSettings()
+
+        guard let reopenedWindow = settingsWindow(),
+              let reopenedSession = reopenedWindow.contentViewController else {
+            XCTFail("Settings window should reopen with a hosting controller")
+            return
+        }
+        XCTAssertFalse(firstSession === reopenedSession)
+        reopenedWindow.close()
+    }
+
+    @MainActor
+    private func settingsWindow() -> NSWindow? {
+        NSApp.windows.first {
+            $0.title == "AI Usage Bar Settings" && $0.isVisible
+        }
+    }
+
     func testProviderSettingsMergesManualProfilesAndUsesExplicitRoots() throws {
         let discovered = [ClaudeProfile(name: "Personal", configDir: URL(fileURLWithPath: "/tmp/personal"), isDefault: false)]
         let manual = ManualClaudeProfile(name: "Work", configDir: URL(fileURLWithPath: "/tmp/work"))
