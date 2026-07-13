@@ -77,6 +77,8 @@ final class ProviderSettingsTests: XCTestCase {
         draft.codexEnabled = false
         draft.claudeEnabled = false
         draft.geminiEnabled = false
+        draft.monthlyBudgetUSD = 250
+        draft.maskAccounts = true
         draft.providerSettings = ProviderSettings(codexHome: URL(fileURLWithPath: "/tmp/codex"))
 
         let error = await model.apply(draft)
@@ -86,6 +88,10 @@ final class ProviderSettingsTests: XCTestCase {
         XCTAssertFalse(model.codexEnabled)
         XCTAssertFalse(model.claudeEnabled)
         XCTAssertFalse(model.geminiEnabled)
+        XCTAssertEqual(model.monthlyBudgetUSD, 250)
+        XCTAssertTrue(model.maskAccounts)
+        XCTAssertEqual(defaults.double(forKey: "monthlyBudgetUSD"), 250)
+        XCTAssertTrue(defaults.bool(forKey: "maskAccounts"))
     }
 
     @MainActor

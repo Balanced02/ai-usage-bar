@@ -1,14 +1,38 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 import AIUsageBarUI
 
 @main
-struct AIUsageBarApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+struct AIUsageBarMain {
+    @MainActor static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+    }
+}
 
-    var body: some Scene {
-        // Menu-bar-only agent; the UI lives in an NSPopover managed by the delegate.
-        Settings { EmptyView() }
+@MainActor
+final class SettingsWindowController: NSWindowController {
+    init(model: AppModel) {
+        let host = NSHostingController(rootView: SettingsView(model: model))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 650),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "AI Usage Bar Settings"
+        window.contentViewController = host
+        window.isRestorable = false
+        window.disableSnapshotRestoration()
+        window.center()
+        super.init(window: window)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 }
 
@@ -18,13 +42,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
+    private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)   // no Dock icon
 
         // The panel — an NSPopover sizes to its SwiftUI content every time,
         // which MenuBarExtra's window does not (it won't shrink back).
-        let host = NSHostingController(rootView: MenuContentView(model: model))
+        let host = NSHostingController(rootView: MenuContentView(
+            model: model,
+            openSettings: { [weak self] in self?.showSettings() }
+        ))
         host.sizingOptions = [.preferredContentSize]
         popover.contentViewController = host
         popover.behavior = .transient
@@ -91,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.setSubmenu(dashboards, for: dashParent)
 
         menu.addItem(.separator())
+        item(menu, "Settings…", #selector(showSettings), key: ",")
         item(menu, "Quit", #selector(quit), key: "q")
 
         if let button = statusItem.button {
@@ -107,8 +136,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func refreshNow() { Task { await model.refresh() } }
     @objc private func copySnapshotAction() { model.copySnapshot() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
+    @objc func showSettings() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(model: model)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindowController?.showWindow(nil)
+        settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    }
+
     @objc private func openDashboard(_ sender: NSMenuItem) {
         if let url = sender.representedObject as? URL { NSWorkspace.shared.open(url) }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        false
     }
 
     private func updateButtonImage() {
