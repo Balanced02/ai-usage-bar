@@ -72,18 +72,31 @@ jobs:
             --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
           xcrun stapler staple dist/AIUsageBar.app
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       - name: Package zip + dmg
         run: |
           mkdir -p dist/artifacts
           ZIP="dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.zip"
+          DMG="dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.dmg"
           ditto -c -k --keepParent dist/AIUsageBar.app "$ZIP"
-          # Stage the .app beside an /Applications symlink so the mounted DMG shows
-          # the familiar drag-to-Applications install window.
-          STAGE="$RUNNER_TEMP/dmg"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+          STAGE="$RUNNER_TEMP/dmgsrc"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           cp -R dist/AIUsageBar.app "$STAGE/"
-          ln -s /Applications "$STAGE/Applications"
-          hdiutil create -volname "AI Usage Bar" -srcfolder "$STAGE" \
-            -ov -format UDZO "dist/artifacts/AIUsageBar-${GITHUB_REF_NAME}.dmg"
+          # A laid-out DMG: app on the left, Applications on the right, with a baked
+          # .DS_Store so Finder always shows the drag-to-install window. Fall back to
+          # a plain symlink DMG if create-dmg's Finder scripting hiccups on the runner.
+          if create-dmg \
+               --volname "AI Usage Bar" --window-size 540 380 --icon-size 128 \
+               --icon "AIUsageBar.app" 140 190 --app-drop-link 400 190 \
+               --hide-extension "AIUsageBar.app" --no-internet-enable \
+               "$DMG" "$STAGE" && [ -f "$DMG" ]; then
+            echo "create-dmg: laid-out DMG built"
+          else
+            echo "create-dmg failed — plain symlink DMG fallback"
+            ln -s /Applications "$STAGE/Applications"
+            hdiutil create -volname "AI Usage Bar" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+          fi
           echo "SHA256=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_ENV"
 
       - name: Extract release notes from CHANGELOG

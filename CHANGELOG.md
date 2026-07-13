@@ -11,9 +11,18 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-13
+
 ### Changed
-- The release `.dmg` now includes an `/Applications` symlink, so mounting it shows the
-  standard drag-to-Applications install window instead of a bare `.app`.
+- The release `.dmg` now opens to a proper **drag-to-Applications** window — app on the
+  left, Applications folder on the right, with a saved layout — via `create-dmg`, instead
+  of a bare `.app` icon.
+
+## [0.1.2] - 2026-07-13
+
+### Changed
+- Added an `/Applications` symlink to the release `.dmg` (superseded by the laid-out
+  window in 0.1.3).
 
 ## [0.1.1] - 2026-07-13
 
@@ -51,6 +60,8 @@ First public release — every AI-coding limit in your menu bar.
 - **Settings window** — refresh cadence, menu-bar style, budget, notifications,
   provider toggles, and data-location roots.
 
-[Unreleased]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Balanced02/ai-usage-bar/releases/tag/v0.1.0
