@@ -103,8 +103,12 @@ need an Apple Developer ID + notarization.
 
 ## Settings
 
-Click the gear in the panel: refresh cadence, per-provider toggles, menu-bar style
-(text / meters), notifications on/off, and launch-at-login.
+Click the gear in the panel to open **Settings**. **General** manages refresh cadence,
+menu-bar style, monthly budget, notifications, **Mask account details**, and launch at login;
+**Providers** enables or disables each service; **Data locations** selects provider
+configuration roots. Choose the Codex or Gemini configuration-root folder (usually
+`~/.codex` or `~/.gemini`), not an executable. Auto-discovered Claude profiles remain
+available, and named manual Claude profiles can be added to supplement automatic discovery.
 
 ## Privacy
 
@@ -112,7 +116,7 @@ All usage is read from local files and your existing Keychain credentials. The a
 network calls except Claude's own usage endpoints, using your own token — the exact requests
 Claude Code already makes. Nothing is uploaded, logged remotely, or shared.
 
-**Screen-sharing?** Flip **Mask account details** (gear menu) to hide emails (`y•••@•••`, domain
+**Screen-sharing?** Flip **Mask account details** in **Settings → General** to hide emails (`y•••@•••`, domain
 removed) and repo names (`Project 1`, `Project 2`) so a demo doesn't reveal where you work. It's
 persisted, so it stays on until you turn it off.
 
