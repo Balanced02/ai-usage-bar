@@ -178,11 +178,12 @@ public final class AppModel {
 
     /// Rebuilds the ordered provider list (Codex → Claude profiles → Gemini),
     /// the menu-bar label, and keeps a valid tab selected.
-    private func rebuild(local: (codex: ProviderUsage?, gemini: ProviderUsage?)) {
+    private func rebuild(local: (codex: ProviderUsage?, gemini: ProviderUsage?, customs: [ProviderUsage])) {
         var arr: [ProviderUsage] = []
         if let c = local.codex { arr.append(c) }
         if claudeEnabled { arr.append(contentsOf: lastClaude) }
         if let g = local.gemini { arr.append(g) }
+        arr.append(contentsOf: local.customs)
         providers = arr
         updateLabel()
         ensureSelection()
@@ -228,7 +229,7 @@ public final class AppModel {
     /// One dual-bar meter item per provider kind (worst 5h / weekly across accounts).
     public func meterItems() -> [MenuBarMeterItem] {
         var items: [MenuBarMeterItem] = []
-        for kind in [ProviderKind.codex, .claude, .gemini] {
+        for kind in [ProviderKind.codex, .claude, .gemini, .custom] {
             let cards = providers.filter { $0.kind == kind }
             guard !cards.isEmpty else { continue }
             let allWindows = cards.flatMap { $0.windows }
@@ -243,7 +244,7 @@ public final class AppModel {
     /// Provider kinds present, in a stable tab order.
     public var kinds: [ProviderKind] {
         let present = Set(providers.map(\.kind))
-        return [.claude, .codex, .gemini].filter(present.contains)
+        return [.claude, .codex, .gemini, .custom].filter(present.contains)
     }
 
     /// All account cards for a kind (e.g. both Claude profiles), in order.
@@ -288,7 +289,7 @@ public final class AppModel {
     /// One chip per provider kind, using the worst window across that kind's cards.
     public func labelChips() -> [LabelChip] {
         var chips: [LabelChip] = []
-        for kind in [ProviderKind.codex, .claude, .gemini] {
+        for kind in [ProviderKind.codex, .claude, .gemini, .custom] {
             let cards = providers.filter { $0.kind == kind }
             guard !cards.isEmpty else { continue }
             let pct = cards.compactMap { $0.maxUsedPercent }.max()

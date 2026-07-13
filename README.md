@@ -55,6 +55,8 @@ accounts at a glance. Everything is read locally; nothing leaves your machine.
   Right-click the icon for a quick menu (peek, copy snapshot, dashboards, or **Settings…**).
 - **Click-through** to each provider's dashboard, a stale-data badge when an endpoint is failing,
   and a sign-in helper for profiles that aren't authenticated yet.
+- **Custom providers** — point at any tool's `.jsonl` logs plus the dot-paths to its rate-limit
+  fields (Settings → Custom providers) to add OpenRouter, LiteLLM, a proxy, or any future tool — no code.
 - **Native & tiny** — SwiftUI + AppKit, no Dock icon, launch-at-login, ~15 MB.
 
 Threshold colors: green `< 50` · yellow `< 75` · orange `< 90` · red. Bars use each account's
@@ -75,9 +77,13 @@ Everything is local — no proxy, no telemetry, no account of ours.
 | **Codex** | Newest `token_count` event under the configured Codex root (defaults to `$CODEX_HOME`, then `~/.codex`) — real 5h/weekly %, resets, plan, credits, tokens. Zero-auth. | ✅ Full |
 | **Claude** | `GET api.anthropic.com/api/oauth/usage` per profile (OAuth token from the Keychain, account matched via `/api/oauth/profile`). Falls back to local token-activity if the endpoint is unavailable. | ✅ Full % |
 | **Gemini** | Detects `gemini-cli` and reads the selected configuration root (defaults to `~/.gemini`); shows the plan cap or "not detected". gemini-cli persists no live quota. | ⚠️ Best-effort |
+| **Custom** | Any folder of `.jsonl` logs + the dot-paths you configure (e.g. `rate_limit.used_percent`, `rate_limit.resets_at`). Newest file, last matching line. | ✅ Whatever the tool writes |
 
 Claude profiles are **auto-discovered** by parsing `CLAUDE_CONFIG_DIR=…` out of your shell rc
 files, so a `claude-work` alias just works. See [DESIGN.md](DESIGN.md) for the full write-up.
+
+<p align="center"><img src="docs/panel-custom.png" width="300" alt="a custom provider tab"></p>
+<p align="center"><sub>Add any tool via Settings → Custom providers — it gets its own tab. (Mock data.)</sub></p>
 
 ## Install
 

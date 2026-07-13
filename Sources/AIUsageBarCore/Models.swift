@@ -5,6 +5,7 @@ public enum ProviderKind: String, Codable, Sendable, CaseIterable {
     case claude
     case codex
     case gemini
+    case custom   // user-configured providers (grouped under one "Custom" tab)
 }
 
 /// The rolling window a usage percentage applies to. Identified by duration so we

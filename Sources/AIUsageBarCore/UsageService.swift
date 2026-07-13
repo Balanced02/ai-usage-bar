@@ -8,20 +8,22 @@ public struct UsageConfig: Sendable {
     public var codexHome: URL?
     public var geminiHome: URL?
     public var claudeProfiles: [ClaudeProfile]
+    public var customProviders: [CustomProviderConfig]
     /// Minimum seconds between live Claude endpoint calls (avoids 429s).
     public var claudeMinInterval: TimeInterval
     public var allowKeychain: Bool
 
     public init(codexEnabled: Bool = true, claudeEnabled: Bool = true, geminiEnabled: Bool = true,
                 codexHome: URL? = nil, geminiHome: URL? = nil,
-                claudeProfiles: [ClaudeProfile] = [], claudeMinInterval: TimeInterval = 180,
-                allowKeychain: Bool = true) {
+                claudeProfiles: [ClaudeProfile] = [], customProviders: [CustomProviderConfig] = [],
+                claudeMinInterval: TimeInterval = 180, allowKeychain: Bool = true) {
         self.codexEnabled = codexEnabled
         self.claudeEnabled = claudeEnabled
         self.geminiEnabled = geminiEnabled
         self.codexHome = codexHome
         self.geminiHome = geminiHome
         self.claudeProfiles = claudeProfiles
+        self.customProviders = customProviders
         self.claudeMinInterval = claudeMinInterval
         self.allowKeychain = allowKeychain
     }
@@ -57,14 +59,16 @@ public actor UsageService {
         if config.codexEnabled { out.append(CodexReader(codexHome: config.codexHome).read()) }
         if config.claudeEnabled { out.append(contentsOf: await claude(now: now)) }
         if config.geminiEnabled { out.append(GeminiReader(geminiHome: config.geminiHome).read()) }
+        for cfg in config.customProviders { out.append(CustomProvider(config: cfg).read()) }
         return out
     }
 
     /// Fast, local-only providers (Codex + Gemini) — safe to read every refresh
     /// and never blocks on the network or Keychain.
-    public func readLocal() -> (codex: ProviderUsage?, gemini: ProviderUsage?) {
+    public func readLocal() -> (codex: ProviderUsage?, gemini: ProviderUsage?, customs: [ProviderUsage]) {
         (config.codexEnabled ? CodexReader(codexHome: config.codexHome).read() : nil,
-         config.geminiEnabled ? GeminiReader(geminiHome: config.geminiHome).read() : nil)
+         config.geminiEnabled ? GeminiReader(geminiHome: config.geminiHome).read() : nil,
+         config.customProviders.map { CustomProvider(config: $0).read() })
     }
 
     /// Claude cards (throttled live endpoint + Keychain). May block briefly on a

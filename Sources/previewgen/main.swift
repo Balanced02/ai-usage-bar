@@ -59,7 +59,7 @@ struct PreviewPanel: View {
     let kind: ProviderKind
     var masked: Bool = false
     var body: some View {
-        let kinds = [ProviderKind.claude, .codex, .gemini].filter { k in providers.contains { $0.kind == k } }
+        let kinds = [ProviderKind.claude, .codex, .gemini, .custom].filter { k in providers.contains { $0.kind == k } }
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("AI Usage").font(.headline)
@@ -394,6 +394,9 @@ func mockProviders() -> [ProviderUsage] {
                       cost: mockCost, status: .ok, lastUpdated: Date()),
         ProviderUsage(id: "gemini", kind: .gemini, displayName: "Gemini",
                       status: .notInstalled, detail: "Not detected — install gemini-cli"),
+        ProviderUsage(id: "custom:openrouter", kind: .custom, displayName: "OpenRouter",
+                      windows: [w(.other, 34, 1440, 20, name: "Daily")],
+                      status: .ok, lastUpdated: Date()),
     ]
 }
 
@@ -414,6 +417,7 @@ func generate() async {
     write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .claude)), "panel-mock.png")
     write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .codex)), "panel-mock-codex.png")
     write(png(PreviewPanel(title: "updated just now", providers: mock, kind: .gemini)), "panel-mock-gemini.png")
+    write(png(PreviewPanel(title: "custom provider", providers: mock, kind: .custom)), "panel-custom.png")
     write(png(CostSection(cost: mockCost, expanded: true)
         .padding(12).frame(width: 320)
         .background(Color(nsColor: .windowBackgroundColor))), "cost-expanded.png")

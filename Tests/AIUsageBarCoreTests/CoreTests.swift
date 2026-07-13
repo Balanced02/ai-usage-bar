@@ -247,6 +247,37 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(usage.detail, "No \(root.appendingPathComponent("sessions").path) found")
     }
 
+    func testCustomProviderReadsConfiguredJSONL() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("custom-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let line = #"{"rate_limit":{"used_percent":42.5,"resets_at":1784488331}}"#
+        try (line + "\n").write(to: dir.appendingPathComponent("log.jsonl"), atomically: true, encoding: .utf8)
+
+        let config = CustomProviderConfig(name: "OpenRouter", folder: dir,
+                                          percentPath: "rate_limit.used_percent",
+                                          resetPath: "rate_limit.resets_at", windowLabel: "Daily")
+        let usage = CustomProvider(config: config).read()
+        XCTAssertEqual(usage.kind, .custom)
+        XCTAssertEqual(usage.displayName, "OpenRouter")
+        XCTAssertEqual(usage.status, .ok)
+        XCTAssertEqual(usage.windows.first?.usedPercent, 42.5)
+        XCTAssertEqual(usage.windows.first?.name, "Daily")
+        XCTAssertNotNil(usage.windows.first?.resetsAt)
+
+        // Dot-path resolution.
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        XCTAssertEqual(CustomProvider.number(CustomProvider.value(at: "rate_limit.used_percent", in: obj)), 42.5)
+        XCTAssertNil(CustomProvider.value(at: "rate_limit.missing", in: obj))
+
+        // Missing folder → notInstalled.
+        let missing = CustomProvider(config: CustomProviderConfig(
+            name: "X", folder: dir.appendingPathComponent("nope"), percentPath: "x")).read()
+        XCTAssertEqual(missing.status, .notInstalled)
+
+        try? fm.removeItem(at: dir)
+    }
+
     // Builds a token_count rollout line like the ones Codex writes.
     private func tokenCountLine(ts: String, p5h: Double, wk: Double, credits: String?, plan: String) -> String {
         let creditsJSON = credits.map { #"{"has_credits":true,"unlimited":false,"balance":"\#($0)"}"# } ?? "null"

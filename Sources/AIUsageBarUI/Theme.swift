@@ -112,6 +112,7 @@ public enum Theme {
         case .claude: return URL(string: "https://claude.ai/settings/usage")
         case .codex: return URL(string: "https://chatgpt.com/codex/settings/usage")
         case .gemini: return URL(string: "https://aistudio.google.com/usage")
+        case .custom: return nil
         }
     }
 
@@ -131,6 +132,7 @@ public enum Theme {
         case .claude: return "Claude"
         case .codex: return "Codex"
         case .gemini: return "Gemini"
+        case .custom: return "Custom"
         }
     }
 
@@ -156,6 +158,7 @@ public enum Theme {
         case .claude: return "a.circle.fill"
         case .codex: return "chevron.left.forwardslash.chevron.right"
         case .gemini: return "sparkle"
+        case .custom: return "puzzlepiece.extension.fill"
         }
     }
 
@@ -164,6 +167,7 @@ public enum Theme {
         case .claude: return Color(red: 0.85, green: 0.45, blue: 0.24) // Claude clay
         case .codex: return Color(red: 0.10, green: 0.62, blue: 0.47)  // OpenAI green
         case .gemini: return Color(red: 0.26, green: 0.52, blue: 0.96) // Google blue
+        case .custom: return Color(red: 0.55, green: 0.55, blue: 0.60) // neutral
         }
     }
 
@@ -172,6 +176,7 @@ public enum Theme {
         case .claude: return "Cl"
         case .codex: return "Cx"
         case .gemini: return "Gm"
+        case .custom: return "Cu"
         }
     }
 

@@ -42,12 +42,27 @@ public struct ProviderSettings: Codable, Sendable, Hashable {
     public var codexHome: URL?
     public var geminiHome: URL?
     public var manualClaudeProfiles: [ManualClaudeProfile]
+    public var customProviders: [CustomProviderConfig]
 
     public init(codexHome: URL? = nil, geminiHome: URL? = nil,
-                manualClaudeProfiles: [ManualClaudeProfile] = []) {
+                manualClaudeProfiles: [ManualClaudeProfile] = [],
+                customProviders: [CustomProviderConfig] = []) {
         self.codexHome = codexHome?.standardizedFileURL
         self.geminiHome = geminiHome?.standardizedFileURL
         self.manualClaudeProfiles = manualClaudeProfiles
+        self.customProviders = customProviders
+    }
+
+    // Tolerant decoder so older saved settings (without newer fields) still load.
+    private enum CodingKeys: String, CodingKey {
+        case codexHome, geminiHome, manualClaudeProfiles, customProviders
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        codexHome = try c.decodeIfPresent(URL.self, forKey: .codexHome)
+        geminiHome = try c.decodeIfPresent(URL.self, forKey: .geminiHome)
+        manualClaudeProfiles = try c.decodeIfPresent([ManualClaudeProfile].self, forKey: .manualClaudeProfiles) ?? []
+        customProviders = try c.decodeIfPresent([CustomProviderConfig].self, forKey: .customProviders) ?? []
     }
 
     public func resolvedClaudeProfiles(discoveredProfiles: [ClaudeProfile]) throws -> [ClaudeProfile] {
@@ -89,7 +104,8 @@ public struct ProviderSettings: Codable, Sendable, Hashable {
         UsageConfig(codexEnabled: codexEnabled, claudeEnabled: claudeEnabled,
                     geminiEnabled: geminiEnabled, codexHome: codexHome,
                     geminiHome: geminiHome,
-                    claudeProfiles: try resolvedClaudeProfiles(discoveredProfiles: discoveredProfiles))
+                    claudeProfiles: try resolvedClaudeProfiles(discoveredProfiles: discoveredProfiles),
+                    customProviders: customProviders)
     }
 
     public static func load(from defaults: UserDefaults) -> ProviderSettings {

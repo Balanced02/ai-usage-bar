@@ -44,6 +44,10 @@ Scripts/install-hooks.sh          # activate the pre-commit personal-data guard 
 - **Cost** — subscriptions have no per-token bill, so cost is an **equivalent API cost**:
   local JSONL token counts × per-model pricing (`Pricing.swift`).
 - **Gemini** — detection only; no local live quota exists.
+- **Custom** — user-configured (`CustomProvider`/`CustomProviderConfig`): a folder of `.jsonl` logs
+  + dot-paths to the rate-limit fields, grouped under the `.custom` kind. Configured in Settings →
+  Custom providers; persisted in `ProviderSettings`. Adding a *built-in* provider = a reader that
+  returns `ProviderUsage`, wired into `UsageService`.
 
 ## macOS gotchas (learned the hard way)
 

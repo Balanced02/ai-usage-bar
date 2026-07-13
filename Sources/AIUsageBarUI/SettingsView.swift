@@ -26,6 +26,8 @@ public struct SettingsView: View {
                 generalSection
                 providersSection
                 dataLocationsSection
+                customProvidersSection
+                footerSection
             }
             .formStyle(.grouped)
             .padding(.horizontal)
@@ -119,12 +121,27 @@ public struct SettingsView: View {
             }
 
             Button("Add profile", action: addProfile)
+        }
+    }
 
-            if let errorMessage {
-                Text(errorMessage)
-                    .foregroundStyle(.red)
+    private var customProvidersSection: some View {
+        Section("Custom providers") {
+            if draft.providerSettings.customProviders.isEmpty {
+                Text("Point at any tool that writes rate-limit JSON to a folder of .jsonl logs — no code.")
+                    .foregroundStyle(.secondary)
             }
+            ForEach($draft.providerSettings.customProviders) { provider in
+                customProviderRow(provider)
+            }
+            Button("Add custom provider", action: addCustomProvider)
+        }
+    }
 
+    private var footerSection: some View {
+        Section {
+            if let errorMessage {
+                Text(errorMessage).foregroundStyle(.red)
+            }
             HStack {
                 Spacer()
                 Button("Cancel", action: resetFromModel)
@@ -132,6 +149,44 @@ public struct SettingsView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
+    }
+
+    private func customProviderRow(_ provider: Binding<CustomProviderConfig>) -> some View {
+        let id = provider.wrappedValue.id
+        return VStack(alignment: .leading, spacing: 6) {
+            TextField("Name", text: provider.name)
+            Text(provider.wrappedValue.folder.path)
+                .font(.caption.monospaced()).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.middle)
+            TextField("Used-percent path (e.g. rate_limit.used_percent)", text: provider.percentPath)
+                .font(.caption.monospaced())
+            TextField("Reset path — optional (e.g. rate_limit.resets_at)", text: Binding(
+                get: { provider.wrappedValue.resetPath ?? "" },
+                set: { provider.wrappedValue.resetPath = $0.isEmpty ? nil : $0 }))
+                .font(.caption.monospaced())
+            TextField("Window label (e.g. Daily)", text: provider.windowLabel)
+            HStack {
+                Button("Choose folder") { chooseCustomFolder(id: id) }
+                Button("Remove", role: .destructive) {
+                    draft.providerSettings.customProviders.removeAll { $0.id == id }
+                }
+            }
+        }
+    }
+
+    private func chooseCustomFolder(id: UUID) {
+        chooseFolder(title: "Choose provider log folder") { url in
+            guard let i = draft.providerSettings.customProviders.firstIndex(where: { $0.id == id }) else { return }
+            draft.providerSettings.customProviders[i].folder = url
+        }
+    }
+
+    private func addCustomProvider() {
+        draft.providerSettings.customProviders.append(
+            CustomProviderConfig(name: "New provider",
+                                 folder: FileManager.default.homeDirectoryForCurrentUser,
+                                 percentPath: "rate_limit.used_percent",
+                                 resetPath: nil, windowLabel: "Usage"))
     }
 
     private func dataRootRow(label: String, url: URL?, choose: @escaping () -> Void,
