@@ -24,6 +24,7 @@ public struct SettingsView: View {
         ScrollView {
             Form {
                 generalSection
+                claudeSection
                 providersSection
                 dataLocationsSection
                 customProvidersSection
@@ -33,6 +34,26 @@ public struct SettingsView: View {
             .padding(.horizontal)
         }
         .frame(minWidth: 580, minHeight: 600)
+    }
+
+    // Connect is an immediate action (it reads the Keychain now), so it's a button
+    // rather than a draft-backed toggle that would only take effect on Apply.
+    private var claudeSection: some View {
+        Section("Claude") {
+            LabeledContent("Live limits") {
+                if model.claudeConnected {
+                    HStack(spacing: 10) {
+                        Label("Connected", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green).labelStyle(.titleAndIcon).font(.callout)
+                        Button("Disconnect") { model.disconnectClaude() }
+                    }
+                } else {
+                    Button("Connect…") { model.connectClaude() }
+                }
+            }
+            Text("Reads the token Claude Code already stored in your Keychain to show live 5-hour and weekly limits — macOS asks once. Your account and cost still show without connecting.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     private var generalSection: some View {
