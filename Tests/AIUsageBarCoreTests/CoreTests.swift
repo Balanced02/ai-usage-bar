@@ -174,6 +174,12 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(cost.byModel.first?.model, "Opus")               // sorted by $ desc
         XCTAssertEqual(Set(cost.byRepo.map(\.repo)), ["api-server", "web-app"])
 
+        // Rolling local-usage windows: all fixture data is ~1h old, so 5h & 7d == total.
+        XCTAssertEqual(cost.last5hUSD, cost.monthUSD, accuracy: 1e-6)
+        XCTAssertEqual(cost.last7dUSD, cost.monthUSD, accuracy: 1e-6)
+        XCTAssertEqual(cost.last5hTokens, cost.totalTokens)
+        XCTAssertEqual(cost.last7dTokens, cost.totalTokens)
+
         // Per-project drilldown: each project carries its own model mix + daily trend.
         let apiRepo = try XCTUnwrap(cost.byRepo.first { $0.repo == "api-server" })
         XCTAssertEqual(apiRepo.byModel.map(\.model), ["Opus"])          // api-server used only Opus

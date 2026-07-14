@@ -143,10 +143,17 @@ public struct CostSummary: Codable, Sendable, Hashable {
     public var byRepo: [RepoCost]
     public var cacheHitRatio: Double?      // 0–1
     public var cacheSavedUSD: Double
+    // Local rolling-window usage (ccusage-style — from log timestamps, no live API).
+    public var last5hTokens: Int
+    public var last5hUSD: Double
+    public var last7dTokens: Int
+    public var last7dUSD: Double
 
     public init(todayUSD: Double, monthUSD: Double, monthToDateUSD: Double, totalTokens: Int,
                 byModel: [ModelCost], byRepo: [RepoCost],
-                cacheHitRatio: Double?, cacheSavedUSD: Double) {
+                cacheHitRatio: Double?, cacheSavedUSD: Double,
+                last5hTokens: Int = 0, last5hUSD: Double = 0,
+                last7dTokens: Int = 0, last7dUSD: Double = 0) {
         self.todayUSD = todayUSD
         self.monthUSD = monthUSD
         self.monthToDateUSD = monthToDateUSD
@@ -155,6 +162,10 @@ public struct CostSummary: Codable, Sendable, Hashable {
         self.byRepo = byRepo
         self.cacheHitRatio = cacheHitRatio
         self.cacheSavedUSD = cacheSavedUSD
+        self.last5hTokens = last5hTokens
+        self.last5hUSD = last5hUSD
+        self.last7dTokens = last7dTokens
+        self.last7dUSD = last7dUSD
     }
 }
 

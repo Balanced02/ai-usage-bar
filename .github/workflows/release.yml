@@ -83,11 +83,17 @@ jobs:
           ditto -c -k --keepParent dist/AIUsageBar.app "$ZIP"
           STAGE="$RUNNER_TEMP/dmgsrc"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           cp -R dist/AIUsageBar.app "$STAGE/"
-          # A laid-out DMG: app on the left, Applications on the right, with a baked
-          # .DS_Store so Finder always shows the drag-to-install window. Fall back to
-          # a plain symlink DMG if create-dmg's Finder scripting hiccups on the runner.
+          # Render the branded DMG window background (title + drag-to-Applications
+          # arrow) as a multi-rep TIFF (1x + retina in one file). If it fails,
+          # --background points at a missing file and create-dmg falls back.
+          .build/release/dmgbggen dist/dmg-background.tiff || swift run -c release dmgbggen dist/dmg-background.tiff || true
+          # A laid-out DMG: app on the left, Applications on the right, over the
+          # branded background, with a baked .DS_Store so Finder always shows the
+          # drag-to-install window. Fall back to a plain symlink DMG if create-dmg's
+          # Finder scripting hiccups on the runner.
           if create-dmg \
                --volname "AI Usage Bar" --window-size 540 380 --icon-size 128 \
+               --background dist/dmg-background.tiff \
                --icon "AIUsageBar.app" 140 190 --app-drop-link 400 190 \
                --hide-extension "AIUsageBar.app" --no-internet-enable \
                "$DMG" "$STAGE" && [ -f "$DMG" ]; then

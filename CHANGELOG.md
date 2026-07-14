@@ -11,6 +11,19 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-14
+
+### Added
+- **Local Claude usage without connecting.** When Claude isn't connected, the Claude tab now
+  shows your **last 5H and 7D** token counts and equivalent cost, derived entirely from your
+  local `~/.claude` logs (ccusage-style) — so the tab is useful before you ever click **Connect**.
+  Connecting still adds the live limit percentage from Claude's usage endpoint.
+
+### Changed
+- The release `.dmg` now opens to a **branded installer window** — app icon, a purple
+  drag-to-Applications arrow, and the app name/tagline over a light background — rendered at
+  retina resolution (a multi-representation TIFF Finder resolves per display).
+
 ## [0.1.5] - 2026-07-14
 
 ### Changed
