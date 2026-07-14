@@ -1,6 +1,6 @@
 cask "ai-usage-bar" do
-  version "0.1.5"
-  sha256 "8f41e31b929849b3e01d0849d729146023dbed8a1a8a9ff347411c701869c28b"
+  version "0.1.6"
+  sha256 "ab8eb02829772d3ae4d7f3dc9d5cee23c2b914ac80d36599cf8e4ab1b4941f0c"
 
   url "https://github.com/Balanced02/ai-usage-bar/releases/download/v#{version}/AIUsageBar-v#{version}.zip"
   name "AI Usage Bar"
