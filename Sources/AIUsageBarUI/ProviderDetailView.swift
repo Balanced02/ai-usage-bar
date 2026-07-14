@@ -109,7 +109,13 @@ struct AccountBlock: View {
             header
 
             if usage.windows.isEmpty {
-                emptyState
+                // No live limits (not connected) — show ccusage-style local usage
+                // from the logs so the account is still useful without the Keychain.
+                if let cost = usage.cost, cost.last7dTokens > 0 {
+                    LocalUsageRows(cost: cost, accent: accent)
+                } else {
+                    emptyState
+                }
             } else {
                 VStack(spacing: 12) {
                     ForEach(usage.windows) { WindowRow(window: $0, accent: accent, samples: history?($0) ?? []) }
@@ -225,6 +231,36 @@ struct AccountBlock: View {
 
 /// One window row: `LABEL   45%            resets in…` over a full-width meter,
 /// with a pace tick and (only when relevant) a burn-rate warning.
+/// ccusage-style local usage windows (5H / 7D) derived from the logs — token
+/// volume + equivalent cost, no live quota %. Shown when a Claude account isn't
+/// connected, so it stays useful without any Keychain access.
+struct LocalUsageRows: View {
+    let cost: CostSummary
+    let accent: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            usageRow("5H", tokens: cost.last5hTokens, usd: cost.last5hUSD)
+            usageRow("7D", tokens: cost.last7dTokens, usd: cost.last7dUSD)
+            Text("Local activity from your logs — Connect for the live limit %.")
+                .font(.caption2).foregroundStyle(.tertiary)
+        }
+    }
+
+    private func usageRow(_ label: String, tokens: Int, usd: Double) -> some View {
+        HStack(spacing: 10) {
+            Text(label).font(.system(size: 12, weight: .semibold))
+                .frame(width: 32, alignment: .leading)
+            Text("\(Theme.compactTokens(tokens) ?? "0") tok")
+                .font(.system(size: 12).monospacedDigit()).foregroundStyle(.secondary)
+            Spacer(minLength: 6)
+            Text(Theme.usd(usd))
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .foregroundStyle(Theme.modelColor("Opus"))
+        }
+    }
+}
+
 struct WindowRow: View {
     let window: UsageWindow
     let accent: Color

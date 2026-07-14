@@ -22,3 +22,6 @@ dist/
 
 # Claude Code local (non-shared) settings
 .claude/settings.local.json
+
+# Superpowers plugin local state
+.superpowers/

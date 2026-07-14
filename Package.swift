@@ -35,6 +35,9 @@ let package = Package(
             name: "icongen"
         ),
         .executableTarget(
+            name: "dmgbggen"
+        ),
+        .executableTarget(
             name: "usageprobe",
             dependencies: ["AIUsageBarCore"]
         ),

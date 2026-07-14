@@ -14,6 +14,8 @@ public enum ClaudeCostReader {
         let cacheDir = cacheDirectory ?? UsageHistory.defaultDirectory()
 
         let cutoff30 = now.addingTimeInterval(-30 * 24 * 3600)
+        let cutoff5h = now.addingTimeInterval(-5 * 3600)
+        let cutoff7d = now.addingTimeInterval(-7 * 24 * 3600)
         let cal = Calendar.current
         let startOfToday = cal.startOfDay(for: now)
         let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? startOfToday
@@ -22,7 +24,7 @@ public enum ClaudeCostReader {
         // Skip the (potentially large) full parse when nothing changed since the
         // last compute — the signature is just file paths + mtimes + sizes. The
         // version prefix invalidates the cache when the aggregation logic changes.
-        let signature = "v4|" + fileSignature(files)
+        let signature = "v5|" + fileSignature(files)
         let dayKey = Int(startOfToday.timeIntervalSince1970)
         if let cached = loadCache(dir: cacheDir, profileID: profile.id),
            cached.signature == signature, cached.day == dayKey {
@@ -39,6 +41,8 @@ public enum ClaudeCostReader {
         var repoDaily: [String: [Double]] = [:]                                 // repo → per-day $ (oldest→newest)
         var rawInput = 0, cacheCreation = 0, cacheRead = 0
         var cacheSavedUSD = 0.0
+        var last5hTokens = 0, last7dTokens = 0
+        var last5hUSD = 0.0, last7dUSD = 0.0
         var repoNames: [String: String] = [:]   // cwd → project name (memoized string parse)
 
         for file in files {
@@ -69,6 +73,8 @@ public enum ClaudeCostReader {
                 monthUSD += usd
                 if ts >= startOfMonth { monthToDateUSD += usd }
                 if ts >= startOfToday { todayUSD += usd }
+                if ts >= cutoff5h { last5hTokens += toks; last5hUSD += usd }
+                if ts >= cutoff7d { last7dTokens += toks; last7dUSD += usd }
 
                 let mk = shortModel(model)
                 let m = byModel[mk] ?? (0, 0); byModel[mk] = (m.tokens + toks, m.usd + usd)
@@ -109,7 +115,9 @@ public enum ClaudeCostReader {
                          dailyUSD: repoDaily[repo] ?? [Double](repeating: 0, count: dailyBuckets))
             }.sorted { $0.usd > $1.usd },
             cacheHitRatio: hit,
-            cacheSavedUSD: cacheSavedUSD
+            cacheSavedUSD: cacheSavedUSD,
+            last5hTokens: last5hTokens, last5hUSD: last5hUSD,
+            last7dTokens: last7dTokens, last7dUSD: last7dUSD
         )
         saveCache(dir: cacheDir, profileID: profile.id, signature: signature, day: dayKey, summary: summary)
         return summary
