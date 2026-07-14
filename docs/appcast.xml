@@ -11,6 +11,19 @@
     <!-- Newest release first. Fill edSignature + length from the Release
          workflow's "Sign update for Sparkle" step output. -->
     <item>
+      <title>0.1.6</title>
+      <pubDate>Tue, 14 Jul 2026 23:37:00 +0000</pubDate>
+      <sparkle:version>0.1.6</sparkle:version>
+      <sparkle:shortVersionString>0.1.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[Local Claude 5H/7D usage now shows on the Claude tab before you Connect. The installer .dmg opens to a branded drag-to-Applications window.]]></description>
+      <enclosure
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.1.6/AIUsageBar-v0.1.6.zip"
+        sparkle:edSignature="/DNagTTWHrxB7UOfEfjkkDce6m0DCM7CbMopaJMGYr+uSuINVI9KoNARbKCtLnsHeN2/6kgdxZ85HaXzC1GkCw=="
+        length="2063490"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>0.1.5</title>
       <pubDate>Tue, 14 Jul 2026 14:29:34 +0000</pubDate>
       <sparkle:version>0.1.5</sparkle:version>
