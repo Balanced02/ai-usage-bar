@@ -20,6 +20,9 @@ public struct MenuContentView: View {
             } else {
                 KindTabBar(kinds: model.kinds, worst: model.worstPercent(for:), selection: $model.selectedKind)
                 Divider()
+                if model.selectedKind == .claude && !model.claudeConnected {
+                    ClaudeConnectBanner { model.connectClaude() }
+                }
                 KindDetailView(cards: model.cards(for: model.selectedKind),
                                history: { card, window in model.sparkline(card.id, window) },
                                budget: model.monthlyBudgetUSD,
@@ -92,6 +95,29 @@ public struct MenuContentView: View {
 
     private var launchAtLoginBinding: Binding<Bool> {
         Binding(get: { model.launchAtLogin }, set: { model.launchAtLogin = $0 })
+    }
+}
+
+/// Shown in the Claude tab until the user opts in to live limits — this keeps the
+/// Keychain read (and its one-time macOS prompt) out of the app's launch path.
+struct ClaudeConnectBanner: View {
+    let action: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: "bolt.horizontal.circle.fill").foregroundStyle(.tint)
+                Text("Connect Claude for live limits").font(.callout.weight(.semibold))
+            }
+            Text("Reads the token Claude Code already stored to show your 5-hour and weekly limits. macOS asks once — choose “Always Allow.” Your account and cost still show without connecting.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Connect", action: action)
+                .buttonStyle(.borderedProminent).controlSize(.small)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.accentColor.opacity(0.25)))
     }
 }
 

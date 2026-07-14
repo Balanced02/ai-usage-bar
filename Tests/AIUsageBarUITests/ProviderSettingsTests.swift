@@ -109,6 +109,31 @@ final class ProviderSettingsTests: XCTestCase {
     }
 
     @MainActor
+    func testClaudeConnectIsOptInAndPersisted() async {
+        let suite = "AppModelConnect.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        setenv("AIUSAGEBAR_NO_KEYCHAIN", "1", 1)   // never touch the real Keychain in tests
+        defer { unsetenv("AIUSAGEBAR_NO_KEYCHAIN") }
+
+        // Off by default → nothing reads the Keychain at launch.
+        let model = AppModel(defaults: defaults)
+        XCTAssertFalse(model.claudeConnected)
+        XCTAssertFalse(defaults.bool(forKey: "claudeConnected"))
+
+        model.connectClaude()
+        XCTAssertTrue(model.claudeConnected)
+        XCTAssertTrue(defaults.bool(forKey: "claudeConnected"))
+
+        // Persists across a relaunch.
+        XCTAssertTrue(AppModel(defaults: defaults).claudeConnected)
+
+        model.disconnectClaude()
+        XCTAssertFalse(model.claudeConnected)
+        XCTAssertFalse(defaults.bool(forKey: "claudeConnected"))
+    }
+
+    @MainActor
     func testAppModelApplyPersistsValidatedDraftWithoutReadingProviders() async {
         let suite = "AppModelSettingsTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

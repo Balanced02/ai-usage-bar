@@ -11,6 +11,19 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-14
+
+### Changed
+- **Claude live limits are now opt-in.** The app no longer reads the Claude Code token from
+  the Keychain at launch, so no credential prompt appears when it starts. The Claude tab shows a
+  **Connect** banner (also a Connect/Disconnect control in Settings → Claude); clicking it reads
+  the token in a context you initiated — macOS asks once, then remembers. Your account and cost
+  data still show without connecting. **Upgrading from an earlier version?** Live Claude limits are
+  off until you click **Connect** once (it's a one-time, opt-in step now).
+- Local `Scripts/build-app.sh` builds now auto-sign with an installed **Developer ID** (stable
+  signature) instead of ad-hoc, so rebuilding during development doesn't re-trigger the Keychain
+  prompt. Falls back to ad-hoc when no Developer ID is present.
+
 ## [0.1.4] - 2026-07-13
 
 ### Fixed
@@ -69,7 +82,8 @@ First public release — every AI-coding limit in your menu bar.
 - **Settings window** — refresh cadence, menu-bar style, budget, notifications,
   provider toggles, and data-location roots.
 
-[Unreleased]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Balanced02/ai-usage-bar/compare/v0.1.1...v0.1.2

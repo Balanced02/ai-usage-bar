@@ -19,7 +19,18 @@ CONFIG="release"
 #   SIGN_IDENTITY        "Developer ID Application: Name (TEAMID)"  (default: - = ad-hoc)
 #   SPARKLE_FEED_URL     appcast URL baked into Info.plist
 #   SPARKLE_PUBLIC_KEY   base64 EdDSA public key (from Sparkle's generate_keys)
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+# Prefer a stable Developer ID signature for local builds: without it, every
+# ad-hoc rebuild is a "new app" to macOS, which re-prompts for Keychain access.
+# Falls back to ad-hoc ("-") when no Developer ID is installed (e.g. contributors,
+# CI without certs). Set SIGN_IDENTITY explicitly to override either way.
+if [ -z "${SIGN_IDENTITY:-}" ]; then
+    # awk exits 0 even with no match (and `|| true` guards a security error), so
+    # `set -euo pipefail` never aborts the build when no Developer ID cert exists —
+    # the ad-hoc fallback below runs instead (contributors, CI without certs).
+    SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+        | awk -F'"' '/Developer ID Application/ { print $2; exit }' || true)"
+    SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+fi
 SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://balanced02.github.io/ai-usage-bar/appcast.xml}"
 SPARKLE_PUBLIC_KEY="${SPARKLE_PUBLIC_KEY:-}"
 

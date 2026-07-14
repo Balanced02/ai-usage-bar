@@ -78,6 +78,10 @@ public final class AppModel {
     public var monthlyBudgetUSD: Double { didSet { settingChanged() } }
     /// Masks emails + repo names in the panel (for screen-sharing).
     public var maskAccounts: Bool { didSet { settingChanged() } }
+    /// Opt-in to reading the Claude Code token from the Keychain for live limits.
+    /// Off by default, so nothing prompts for credentials at launch — the user
+    /// connects explicitly via `connectClaude()`. Local account/cost still show.
+    public private(set) var claudeConnected: Bool { didSet { settingChanged(rebuildConfig: true) } }
     private var providerSettings: ProviderSettings
 
     /// Suppresses the reactive `didSet` handlers during a bulk `apply(_:)`.
@@ -104,12 +108,14 @@ public final class AppModel {
         let menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .text
         let monthlyBudgetUSD = defaults.object(forKey: "monthlyBudgetUSD") as? Double ?? 0
         let maskAccounts = defaults.object(forKey: "maskAccounts") as? Bool ?? false
+        let claudeConnected = defaults.object(forKey: "claudeConnected") as? Bool ?? false
         let providerSettings = ProviderSettings.load(from: defaults)
         let initialConfig = Self.usageConfig(
             providerSettings: providerSettings,
             codexEnabled: codexEnabled,
             claudeEnabled: claudeEnabled,
             geminiEnabled: geminiEnabled,
+            claudeConnected: claudeConnected,
             discovered: discoverClaudeProfiles()
         )
 
@@ -123,6 +129,7 @@ public final class AppModel {
         self.menuBarStyle = menuBarStyle
         self.monthlyBudgetUSD = monthlyBudgetUSD
         self.maskAccounts = maskAccounts
+        self.claudeConnected = claudeConnected
         self.providerSettings = providerSettings
         self.appliedClaudeProfiles = Self.effectiveClaudeProfiles(for: initialConfig)
         self.service = UsageService(config: initialConfig)
@@ -351,7 +358,7 @@ public final class AppModel {
         } catch {
             return error.localizedDescription
         }
-        Self.applyRuntimeOverrides(to: &config)
+        Self.applyRuntimeOverrides(to: &config, connected: claudeConnected)
         let effectiveClaudeProfiles = Self.effectiveClaudeProfiles(for: config)
         let shouldClearClaudeCards = appliedClaudeProfiles != effectiveClaudeProfiles
 
@@ -386,7 +393,24 @@ public final class AppModel {
         defaults.set(menuBarStyle.rawValue, forKey: "menuBarStyle")
         defaults.set(monthlyBudgetUSD, forKey: "monthlyBudgetUSD")
         defaults.set(maskAccounts, forKey: "maskAccounts")
+        defaults.set(claudeConnected, forKey: "claudeConnected")
         providerSettings.save(to: defaults)
+    }
+
+    /// Opt in to live Claude limits. Reads the Claude Code token from the Keychain
+    /// (macOS asks once, then remembers) and refreshes immediately so the prompt
+    /// appears in response to the user's click, not silently at launch.
+    public func connectClaude() {
+        guard !claudeConnected else { return }
+        claudeConnected = true            // didSet → reconfigure with allowKeychain = true
+        Task { await refresh() }
+    }
+
+    /// Stop reading the Keychain / live endpoint; keep local account + cost data.
+    public func disconnectClaude() {
+        guard claudeConnected else { return }
+        claudeConnected = false
+        Task { await refresh() }
     }
 
     /// Reactive path for the menu's live controls; a no-op during `apply(_:)`.
@@ -402,6 +426,7 @@ public final class AppModel {
                                       codexEnabled: codexEnabled,
                                       claudeEnabled: claudeEnabled,
                                       geminiEnabled: geminiEnabled,
+                                      claudeConnected: claudeConnected,
                                       discovered: discoverClaudeProfiles())
         appliedClaudeProfiles = Self.effectiveClaudeProfiles(for: config)
         if !claudeEnabled { lastClaude = [] }
@@ -412,6 +437,7 @@ public final class AppModel {
                                     codexEnabled: Bool,
                                     claudeEnabled: Bool,
                                     geminiEnabled: Bool,
+                                    claudeConnected: Bool,
                                     discovered: [ClaudeProfile] = ClaudeProfileDiscovery.discover()) -> UsageConfig {
         var config = (try? providerSettings.usageConfig(
             codexEnabled: codexEnabled,
@@ -424,7 +450,7 @@ public final class AppModel {
             geminiEnabled: geminiEnabled,
             claudeProfiles: discovered
         )
-        applyRuntimeOverrides(to: &config)
+        applyRuntimeOverrides(to: &config, connected: claudeConnected)
         return config
     }
 
@@ -432,9 +458,12 @@ public final class AppModel {
         config.claudeEnabled ? config.claudeProfiles : []
     }
 
-    private static func applyRuntimeOverrides(to config: inout UsageConfig) {
-        // Dev/test escape hatch: skip Keychain + live endpoint (Claude falls back
-        // to local token activity). Set AIUSAGEBAR_NO_KEYCHAIN=1 to enable.
+    private static func applyRuntimeOverrides(to config: inout UsageConfig, connected: Bool) {
+        // Claude live limits are opt-in: the Keychain (and the usage endpoint) are
+        // only read once the user has explicitly connected, so nothing prompts for
+        // credentials at launch. Local account/plan/cost still show either way.
+        config.allowKeychain = connected
+        // Dev/test escape hatch: force off regardless of the connect toggle.
         if ProcessInfo.processInfo.environment["AIUSAGEBAR_NO_KEYCHAIN"] != nil {
             config.allowKeychain = false
         }
