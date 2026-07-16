@@ -11,6 +11,19 @@
     <!-- Newest release first. Fill edSignature + length from the Release
          workflow's "Sign update for Sparkle" step output. -->
     <item>
+      <title>0.2.0</title>
+      <pubDate>Thu, 16 Jul 2026 10:48:00 +0000</pubDate>
+      <sparkle:version>0.2.0</sparkle:version>
+      <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[Claude live limits now use their own sign-in — no more Keychain prompts. Add account (Settings → Claude) signs in via your browser and keeps its own token; add multiple accounts, each with live 5H/7D limits.]]></description>
+      <enclosure
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.2.0/AIUsageBar-v0.2.0.zip"
+        sparkle:edSignature="qiWK1WUymJD/i6J3YLX2zVppLxAa4CaycPQ50nbXSio8KFiMJTW9fRHKS/rPHV8cm+wJZQ84pL9meLd+OM0iDQ=="
+        length="2130683"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>0.1.6</title>
       <pubDate>Tue, 14 Jul 2026 23:37:00 +0000</pubDate>
       <sparkle:version>0.1.6</sparkle:version>
