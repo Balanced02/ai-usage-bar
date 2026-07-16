@@ -11,6 +11,22 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-16
+
+### Changed
+- **Claude live limits now use their own sign-in — no more Keychain prompts.** The app used to
+  read the token Claude Code stored in your Keychain, but Claude Code re-creates that item on every
+  token refresh, which wiped the app's access and made macOS re-prompt at random. Now you **Sign in
+  with Claude** (Settings → Claude → **Add account**, or the banner in the Claude tab): the app runs
+  its own OAuth in your browser, mints its **own** token, and stores it in its **own** Keychain item
+  that it refreshes in place. A signed build reads it back with **zero prompts, ever** — and it
+  persists across restarts (the token refreshes silently; you sign in once).
+- **Multiple accounts.** Add more than one Claude account (e.g. Personal + Work); each shows its own
+  live 5H / 7D limits. Remove an account any time in Settings → Claude.
+
+### Removed
+- The opt-in **Connect** toggle that read Claude Code's Keychain item (superseded by Add account).
+
 ## [0.1.6] - 2026-07-14
 
 ### Added

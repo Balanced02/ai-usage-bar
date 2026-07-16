@@ -58,6 +58,19 @@ public struct ClaudeAccount: Codable, Sendable, Hashable {
     public var organizationUuid: String?
     public var displayName: String?
 
+    public init(emailAddress: String? = nil, organizationName: String? = nil,
+                organizationType: String? = nil, organizationRateLimitTier: String? = nil,
+                accountUuid: String? = nil, organizationUuid: String? = nil,
+                displayName: String? = nil) {
+        self.emailAddress = emailAddress
+        self.organizationName = organizationName
+        self.organizationType = organizationType
+        self.organizationRateLimitTier = organizationRateLimitTier
+        self.accountUuid = accountUuid
+        self.organizationUuid = organizationUuid
+        self.displayName = displayName
+    }
+
     /// A concise plan label for the UI, derived from organizationType.
     public var planLabel: String? {
         guard let t = organizationType else { return nil }
