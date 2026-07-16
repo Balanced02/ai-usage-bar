@@ -76,7 +76,7 @@ Everything is local — no proxy, no telemetry, no account of ours.
 | Provider | Source | Fidelity |
 |---|---|---|
 | **Codex** | Newest `token_count` event under the configured Codex root (defaults to `$CODEX_HOME`, then `~/.codex`) — real 5h/weekly %, resets, plan, credits, tokens. Zero-auth. | ✅ Full |
-| **Claude** | `GET api.anthropic.com/api/oauth/usage` per profile (OAuth token from the Keychain **after you Connect**, account matched via `/api/oauth/profile`). Before connecting (or if the endpoint is unavailable) shows **local 5H / 7D** token activity + equivalent cost from `~/.claude` logs. | ✅ Full % |
+| **Claude** | `GET api.anthropic.com/api/oauth/usage` per account, using a token the app mints via its **own** OAuth (**Add account**) and keeps in its **own** Keychain item — no prompt, refreshed in place. Before signing in (or if the endpoint is unavailable) shows **local 5H / 7D** token activity + equivalent cost from `~/.claude` logs. | ✅ Full % |
 | **Gemini** | Detects `gemini-cli` and reads the selected configuration root (defaults to `~/.gemini`); shows the plan cap or "not detected". gemini-cli persists no live quota. | ⚠️ Best-effort |
 | **Custom** | Any folder of `.jsonl` logs + the dot-paths you configure (e.g. `rate_limit.used_percent`, `rate_limit.resets_at`). Newest file, last matching line. | ✅ Whatever the tool writes |
 
@@ -116,11 +116,13 @@ Scripts/build-app.sh --install   # build → /Applications → launch
 - `Scripts/build-app.sh --install` — copy to `/Applications` (recommended; needed for launch-at-login)
 
 Nothing prompts for credentials at launch. To see **live** Claude limits, open the Claude tab and
-click **Connect** (or Settings → Claude) — macOS then asks once to **Allow** Keychain access for
-the Claude token; choose **Always Allow**. Your account, cost, and **last 5H / 7D local usage**
-(derived from your `~/.claude` logs) show without connecting.
+click **Add account** (or Settings → Claude) — this signs in with Claude in your browser and mints
+the app's **own** token, stored in its **own** Keychain item. Because the app created that item, it
+reads it back with **no macOS prompt**, and refreshes it in place, so you sign in once and it sticks
+across restarts. Add more than one account (Personal + Work) to track each separately. Your account,
+cost, and **last 5H / 7D local usage** (from your `~/.claude` logs) show without signing in.
 (Building locally auto-signs with an installed Developer ID for a stable signature; released builds
-are notarized, so that one-time grant sticks.)
+are notarized, so the Keychain item stays readable across launches.)
 
 ## Settings
 

@@ -36,22 +36,36 @@ public struct SettingsView: View {
         .frame(minWidth: 580, minHeight: 600)
     }
 
-    // Connect is an immediate action (it reads the Keychain now), so it's a button
+    // Sign-in is an immediate action (opens the browser now), so it's a button
     // rather than a draft-backed toggle that would only take effect on Apply.
     private var claudeSection: some View {
         Section("Claude") {
-            LabeledContent("Live limits") {
-                if model.claudeConnected {
-                    HStack(spacing: 10) {
-                        Label("Connected", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green).labelStyle(.titleAndIcon).font(.callout)
-                        Button("Disconnect") { model.disconnectClaude() }
-                    }
-                } else {
-                    Button("Connect…") { model.connectClaude() }
+            ForEach(model.claudeAccounts) { account in
+                LabeledContent {
+                    Button("Remove") { model.removeClaudeAccount(account.key) }
+                        .foregroundStyle(.red)
+                } label: {
+                    Label(account.label, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.primary)
+                        .labelStyle(.titleAndIcon)
                 }
             }
-            Text("Reads the token Claude Code already stored in your Keychain to show live 5-hour and weekly limits — macOS asks once. Your account and cost still show without connecting.")
+            LabeledContent("Account") {
+                if model.signingInClaude {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Waiting for sign-in…").foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button(model.claudeAccounts.isEmpty ? "Add account…" : "Add another…") {
+                        model.addClaudeAccount()
+                    }
+                }
+            }
+            if let err = model.claudeSignInError {
+                Text(err).font(.caption).foregroundStyle(.red)
+            }
+            Text("Sign in with Claude to show live 5-hour and weekly limits. The app mints its own token and stores it in its own Keychain item, so macOS never prompts for access to Claude Code's credentials. Your account and cost show without signing in.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

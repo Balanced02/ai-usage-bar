@@ -20,8 +20,8 @@ public struct MenuContentView: View {
             } else {
                 KindTabBar(kinds: model.kinds, worst: model.worstPercent(for:), selection: $model.selectedKind)
                 Divider()
-                if model.selectedKind == .claude && !model.claudeConnected {
-                    ClaudeConnectBanner { model.connectClaude() }
+                if model.selectedKind == .claude && model.claudeAccounts.isEmpty {
+                    ClaudeConnectBanner(busy: model.signingInClaude) { model.addClaudeAccount() }
                 }
                 KindDetailView(cards: model.cards(for: model.selectedKind),
                                history: { card, window in model.sparkline(card.id, window) },
@@ -98,21 +98,28 @@ public struct MenuContentView: View {
     }
 }
 
-/// Shown in the Claude tab until the user opts in to live limits — this keeps the
-/// Keychain read (and its one-time macOS prompt) out of the app's launch path.
+/// Shown in the Claude tab until an account is added. Sign-in opens the browser and
+/// mints our own token — no prompt for Claude Code's Keychain item, ever.
 struct ClaudeConnectBanner: View {
+    var busy: Bool = false
     let action: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
                 Image(systemName: "bolt.horizontal.circle.fill").foregroundStyle(.tint)
-                Text("Connect Claude for live limits").font(.callout.weight(.semibold))
+                Text("Sign in with Claude for live limits").font(.callout.weight(.semibold))
             }
-            Text("Reads the token Claude Code already stored to show your 5-hour and weekly limits. macOS asks once — choose “Always Allow.” Your account and cost still show without connecting.")
+            Text("Adds your 5-hour and weekly limits. Opens your browser to sign in; the app keeps its own token in its own Keychain item, so macOS never prompts. Your account and cost show without signing in.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Connect", action: action)
-                .buttonStyle(.borderedProminent).controlSize(.small)
+            Button(action: action) {
+                if busy {
+                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Waiting for sign-in…") }
+                } else {
+                    Text("Add account")
+                }
+            }
+            .buttonStyle(.borderedProminent).controlSize(.small).disabled(busy)
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -35,12 +35,23 @@ Scripts/install-hooks.sh          # activate the pre-commit personal-data guard 
   event timestamp** (not file mtime/position). Classify windows by **`window_minutes`**
   (300 = 5h, 10080 = weekly), never by primary/secondary position; either can be null. Tail-read
   (files reach tens of MB); never scan `logs_2.sqlite`.
-- **Claude** — `GET api.anthropic.com/api/oauth/usage` (+ `/api/oauth/profile` for identity).
-  Token from Keychain `Claude Code-credentials-<hash>` — **enumerate, don't compute** the suffix.
-  Headers are mandatory: `Authorization: Bearer`, `anthropic-beta: oauth-2025-04-20`,
-  `User-Agent: claude-code/<ver>` (wrong UA → permanent 429s). Cache ≥ 180s. Multiple profiles
-  are auto-discovered by parsing `CLAUDE_CONFIG_DIR=…` from shell rc files; tokens are matched to
-  profiles by account email/UUID.
+- **Claude** — `GET api.anthropic.com/api/oauth/usage` (+ `/api/oauth/profile` for identity), using
+  the app's **own** OAuth token (`Claude/ClaudeOAuth*`, `ClaudeTokenStore`, `ClaudeTokenProvider`),
+  **not** Claude Code's Keychain item (that item's ACL is wiped on Claude Code's every refresh →
+  recurring prompt; unfixable from the reader side). We run Claude Code's OAuth client
+  (`9d1c250a-…`, PKCE S256, loopback `http://localhost:<ephemeral>/callback`, authorize
+  `claude.ai/oauth/authorize`, token `platform.claude.com/v1/oauth/token`) and store the token in our
+  own generic-password item (`com.aiusagebar.AIUsageBar.claude-oauth`), keyed by account UUID,
+  updated **in place** (`SecItemUpdate`, never delete+add) so a signed build reads it with **no
+  prompt**. **Two different, endpoint-specific User-Agents** (the non-obvious gotcha): the *usage*
+  endpoint REQUIRES `User-Agent: claude-code/<ver>` (wrong UA → 429), but the *token* endpoint's edge
+  hard-429s `claude-code/*` and `curl/*` and only accepts the CLI's real transport UA — send
+  `axios/<ver>` there. Refresh tokens **rotate** (persist the new one; a `ClaudeTokenProvider` actor
+  serializes refreshes); `invalid_grant` on refresh is terminal → re-auth. Keychain gotcha:
+  `kSecReturnData` + `kSecMatchLimitAll` in one query is `errSecParam` (-50) — list attributes, then
+  read each item. Headers otherwise: `Authorization: Bearer`, `anthropic-beta: oauth-2025-04-20`.
+  Cache ≥ 180s. Config-dir profiles are still auto-discovered; live tokens are matched to them by
+  account email/UUID, and a signed-in account with no local profile gets its own live-only card.
 - **Cost** — subscriptions have no per-token bill, so cost is an **equivalent API cost**:
   local JSONL token counts × per-model pricing (`Pricing.swift`).
 - **Gemini** — detection only; no local live quota exists.
