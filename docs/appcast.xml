@@ -11,6 +11,19 @@
     <!-- Newest release first. Fill edSignature + length from the Release
          workflow's "Sign update for Sparkle" step output. -->
     <item>
+      <title>0.3.0</title>
+      <pubDate>Thu, 23 Jul 2026 12:08:00 +0000</pubDate>
+      <sparkle:version>0.3.0</sparkle:version>
+      <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[Claude accounts are now just what you sign into — name each one, and point it at a logs folder to also see $ cost. No more path scanning; renaming/cost changes no longer risk rate-limiting.]]></description>
+      <enclosure
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.3.0/AIUsageBar-v0.3.0.zip"
+        sparkle:edSignature="wrJvUdB82m2chVRfTVcuXy2F/qbGGf8dxejbP+4f0zfDXhiUg2yPcivazJvWJzstvPH7N5RViZhFATOvgs3AAQ=="
+        length="2122486"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>0.2.0</title>
       <pubDate>Thu, 16 Jul 2026 10:48:00 +0000</pubDate>
       <sparkle:version>0.2.0</sparkle:version>
