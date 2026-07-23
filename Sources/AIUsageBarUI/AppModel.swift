@@ -22,8 +22,11 @@ public struct LabelChip: Identifiable, Sendable {
 public struct ClaudeAccountSummary: Identifiable, Sendable, Hashable {
     public let key: String        // Keychain account key (UUID/email)
     public let email: String?
+    public let name: String?      // user-assigned display name
+    public let logsDir: String?   // configured cost-logs folder (nil = cost off)
     public var id: String { key }
-    public var label: String { email ?? key }
+    public var label: String { name ?? email ?? key }
+    public var hasCost: Bool { logsDir != nil }
 }
 
 /// How the menu-bar title is drawn.
@@ -71,7 +74,7 @@ public final class AppModel {
     private var lastClaude: [ProviderUsage] = []
     /// The resolved Claude profiles represented by the currently applied settings.
     /// Disabled Claude is intentionally represented by no effective profiles.
-    private var appliedClaudeProfiles: [ClaudeProfile]
+    private var appliedClaudeConfigs: [String: ClaudeAccountConfig]
     private let debugEnabled = ProcessInfo.processInfo.environment["AIUSAGEBAR_DEBUG"] != nil
 
     // Settings (persisted). The menu's live controls mutate these directly; the
@@ -105,13 +108,8 @@ public final class AppModel {
     private var service: UsageService
     private var pollTask: Task<Void, Never>?
     private let defaults: UserDefaults
-    private let discoverClaudeProfiles: () -> [ClaudeProfile]
 
-    public convenience init(defaults: UserDefaults = .standard) {
-        self.init(defaults: defaults, discoverClaudeProfiles: { ClaudeProfileDiscovery.discover() })
-    }
-
-    init(defaults: UserDefaults, discoverClaudeProfiles: @escaping () -> [ClaudeProfile]) {
+    public init(defaults: UserDefaults = .standard) {
         let cadenceSeconds = defaults.object(forKey: "cadenceSeconds") as? Double ?? 45
         let codexEnabled = defaults.object(forKey: "codexEnabled") as? Bool ?? true
         let claudeEnabled = defaults.object(forKey: "claudeEnabled") as? Bool ?? true
@@ -125,12 +123,10 @@ public final class AppModel {
             providerSettings: providerSettings,
             codexEnabled: codexEnabled,
             claudeEnabled: claudeEnabled,
-            geminiEnabled: geminiEnabled,
-            discovered: discoverClaudeProfiles()
+            geminiEnabled: geminiEnabled
         )
 
         self.defaults = defaults
-        self.discoverClaudeProfiles = discoverClaudeProfiles
         self.cadenceSeconds = cadenceSeconds
         self.codexEnabled = codexEnabled
         self.claudeEnabled = claudeEnabled
@@ -139,9 +135,9 @@ public final class AppModel {
         self.menuBarStyle = menuBarStyle
         self.monthlyBudgetUSD = monthlyBudgetUSD
         self.maskAccounts = maskAccounts
-        self.claudeAccounts = Self.loadClaudeAccounts()
+        self.claudeAccounts = Self.loadClaudeAccounts(configs: providerSettings.claudeAccountConfigs)
         self.providerSettings = providerSettings
-        self.appliedClaudeProfiles = Self.effectiveClaudeProfiles(for: initialConfig)
+        self.appliedClaudeConfigs = Self.effectiveClaudeConfigs(for: initialConfig)
         self.service = UsageService(config: initialConfig)
         notifier.enabled = notificationsEnabled
     }
@@ -349,28 +345,21 @@ public final class AppModel {
         )
     }
 
-    public func automaticClaudeProfiles() -> [ClaudeProfile] {
-        discoverClaudeProfiles()
-    }
-
     /// Validates and applies every setting as a single refresh operation.
     /// Returns a validation message without changing live state when invalid.
     public func apply(_ draft: SettingsDraft) async -> String? {
-        let discovered = discoverClaudeProfiles()
-        var config: UsageConfig
-        do {
-            config = try draft.providerSettings.usageConfig(
-                codexEnabled: draft.codexEnabled,
-                claudeEnabled: draft.claudeEnabled,
-                geminiEnabled: draft.geminiEnabled,
-                discoveredProfiles: discovered
-            )
-        } catch {
-            return error.localizedDescription
-        }
+        // Claude account configs (name/logs) are edited live on the model, not via the
+        // settings draft — so an Apply of *other* settings must not revert them.
+        var settings = draft.providerSettings
+        settings.claudeAccountConfigs = providerSettings.claudeAccountConfigs
+        var config = settings.usageConfig(
+            codexEnabled: draft.codexEnabled,
+            claudeEnabled: draft.claudeEnabled,
+            geminiEnabled: draft.geminiEnabled
+        )
         Self.applyRuntimeOverrides(to: &config)
-        let effectiveClaudeProfiles = Self.effectiveClaudeProfiles(for: config)
-        let shouldClearClaudeCards = appliedClaudeProfiles != effectiveClaudeProfiles
+        let effectiveClaudeConfigs = Self.effectiveClaudeConfigs(for: config)
+        let shouldClearClaudeCards = appliedClaudeConfigs != effectiveClaudeConfigs
 
         isApplying = true
         cadenceSeconds = draft.cadenceSeconds
@@ -381,14 +370,14 @@ public final class AppModel {
         menuBarStyle = draft.menuBarStyle
         monthlyBudgetUSD = draft.monthlyBudgetUSD
         maskAccounts = draft.maskAccounts
-        providerSettings = draft.providerSettings
+        providerSettings = settings          // draft settings + preserved account configs
         isApplying = false
         notifier.enabled = notificationsEnabled
         launchAtLogin = draft.launchAtLogin
         persist()
 
         if shouldClearClaudeCards || !draft.claudeEnabled { lastClaude = [] }
-        appliedClaudeProfiles = effectiveClaudeProfiles
+        appliedClaudeConfigs = effectiveClaudeConfigs
         await service.update(config: config)
         await refresh()
         return nil
@@ -419,7 +408,9 @@ public final class AppModel {
                     Task { @MainActor in NSWorkspace.shared.open(url) }
                 })
                 signingInClaude = false
+                lastClaude = []
                 reloadClaudeAccounts()
+                reconfigure()
                 await refresh()
             } catch ClaudeOAuthError.cancelled {
                 signingInClaude = false            // user closed the browser — silent
@@ -430,21 +421,58 @@ public final class AppModel {
         }
     }
 
-    /// Remove a signed-in account (deletes its stored token) and drop its live card.
+    /// Remove a signed-in account (deletes its stored token + config) and its card.
     public func removeClaudeAccount(_ key: String) {
         Task {
             await ClaudeTokenProvider.shared.signOut(account: key)
+            providerSettings.claudeAccountConfigs[key] = nil
+            lastClaude = []
+            persist()
             reloadClaudeAccounts()
+            reconfigure()
             await refresh()
         }
     }
 
-    /// Refresh the account list shown in Settings from the token store.
-    public func reloadClaudeAccounts() { claudeAccounts = Self.loadClaudeAccounts() }
+    /// Set a friendly display name for an account (empty clears back to the email).
+    public func renameClaudeAccount(_ key: String, to name: String) {
+        var cfg = providerSettings.claudeAccountConfigs[key] ?? ClaudeAccountConfig()
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        cfg.name = trimmed.isEmpty ? nil : trimmed
+        updateClaudeConfig(key, cfg)
+    }
 
-    private static func loadClaudeAccounts() -> [ClaudeAccountSummary] {
-        ClaudeTokenProvider.shared.accounts().map {
-            ClaudeAccountSummary(key: ClaudeTokenStore.accountKey(for: $0), email: $0.accountEmail)
+    /// Point an account at a logs folder to show $ cost (nil = cost off).
+    public func setClaudeAccountLogs(_ key: String, dir: String?) {
+        var cfg = providerSettings.claudeAccountConfigs[key] ?? ClaudeAccountConfig()
+        cfg.logsDir = dir
+        updateClaudeConfig(key, cfg)
+    }
+
+    private func updateClaudeConfig(_ key: String, _ cfg: ClaudeAccountConfig) {
+        // Drop the entry entirely when it carries nothing (keeps the map sparse).
+        providerSettings.claudeAccountConfigs[key] = (cfg.name == nil && cfg.logsDir == nil) ? nil : cfg
+        lastClaude = []
+        persist()
+        reloadClaudeAccounts()
+        reconfigure()
+        Task { await refresh() }
+    }
+
+    /// Refresh the account list shown in Settings from the token store + configs.
+    public func reloadClaudeAccounts() {
+        claudeAccounts = Self.loadClaudeAccounts(configs: providerSettings.claudeAccountConfigs)
+    }
+
+    private static func loadClaudeAccounts(configs: [String: ClaudeAccountConfig]) -> [ClaudeAccountSummary] {
+        ClaudeTokenProvider.shared.accounts().map { token in
+            let key = ClaudeTokenStore.accountKey(for: token)
+            // A stored name equal to the email is not a real custom name (older builds
+            // could persist that) — treat it as none so the email shows as default.
+            var name = configs[key]?.name
+            if let n = name, n.caseInsensitiveCompare(token.accountEmail ?? "\u{0}") == .orderedSame { name = nil }
+            return ClaudeAccountSummary(key: key, email: token.accountEmail,
+                                        name: name, logsDir: configs[key]?.logsDir)
         }
     }
 
@@ -470,9 +498,8 @@ public final class AppModel {
         let config = Self.usageConfig(providerSettings: providerSettings,
                                       codexEnabled: codexEnabled,
                                       claudeEnabled: claudeEnabled,
-                                      geminiEnabled: geminiEnabled,
-                                      discovered: discoverClaudeProfiles())
-        appliedClaudeProfiles = Self.effectiveClaudeProfiles(for: config)
+                                      geminiEnabled: geminiEnabled)
+        appliedClaudeConfigs = Self.effectiveClaudeConfigs(for: config)
         if !claudeEnabled { lastClaude = [] }
         Task { await service.update(config: config) }
     }
@@ -480,25 +507,16 @@ public final class AppModel {
     private static func usageConfig(providerSettings: ProviderSettings,
                                     codexEnabled: Bool,
                                     claudeEnabled: Bool,
-                                    geminiEnabled: Bool,
-                                    discovered: [ClaudeProfile] = ClaudeProfileDiscovery.discover()) -> UsageConfig {
-        var config = (try? providerSettings.usageConfig(
-            codexEnabled: codexEnabled,
-            claudeEnabled: claudeEnabled,
-            geminiEnabled: geminiEnabled,
-            discoveredProfiles: discovered
-        )) ?? UsageConfig(
-            codexEnabled: codexEnabled,
-            claudeEnabled: claudeEnabled,
-            geminiEnabled: geminiEnabled,
-            claudeProfiles: discovered
-        )
+                                    geminiEnabled: Bool) -> UsageConfig {
+        var config = providerSettings.usageConfig(codexEnabled: codexEnabled,
+                                                  claudeEnabled: claudeEnabled,
+                                                  geminiEnabled: geminiEnabled)
         applyRuntimeOverrides(to: &config)
         return config
     }
 
-    private static func effectiveClaudeProfiles(for config: UsageConfig) -> [ClaudeProfile] {
-        config.claudeEnabled ? config.claudeProfiles : []
+    private static func effectiveClaudeConfigs(for config: UsageConfig) -> [String: ClaudeAccountConfig] {
+        config.claudeEnabled ? config.claudeAccountConfigs : [:]
     }
 
     private static func applyRuntimeOverrides(to config: inout UsageConfig) {

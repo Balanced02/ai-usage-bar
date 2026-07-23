@@ -12,6 +12,29 @@ public actor ClaudeTokenProvider {
     /// One in-flight refresh Task per account key, so concurrent `validTokens()`
     /// calls coalesce onto a single network refresh instead of racing the rotation.
     private var refreshing: [String: Task<ClaudeOAuthToken, Error>] = [:]
+    /// Per-account usage response cache (TTL-bounded) so re-rendering after a config
+    /// change (rename, cost folder) doesn't re-hit the rate-limited usage endpoint.
+    private var usageCache: [String: (usage: ClaudeUsage, at: Date)] = [:]
+
+    /// Usage for an account, served from cache within `ttl` seconds. On a **transient**
+    /// error (rate-limit / network blip) the last good usage is served up to `staleTTL`
+    /// so the % bars don't vanish; `unauthorized` is terminal and always propagates so
+    /// the card can prompt to reconnect.
+    public func cachedUsage(key: String, accessToken: String, api: ClaudeUsageAPI,
+                            ttl: TimeInterval = 180, staleTTL: TimeInterval = 1800,
+                            now: Date = Date()) async throws -> ClaudeUsage {
+        if let hit = usageCache[key], now.timeIntervalSince(hit.at) < ttl { return hit.usage }
+        do {
+            let usage = try await api.fetch(accessToken: accessToken)
+            usageCache[key] = (usage, now)
+            return usage
+        } catch ClaudeAPIError.unauthorized {
+            throw ClaudeAPIError.unauthorized                       // terminal — never mask
+        } catch {
+            if let hit = usageCache[key], now.timeIntervalSince(hit.at) < staleTTL { return hit.usage }
+            throw error
+        }
+    }
 
     // MARK: Interactive sign-in (not actor-isolated, so the up-to-5-min browser
     // wait never blocks a usage refresh).
@@ -33,13 +56,14 @@ public actor ClaudeTokenProvider {
 
         var token = try await ClaudeOAuth.exchange(code: cb.code, state: cb.state,
                                                    redirectURI: redirect, pkce: pkce)
-        // The token response usually carries identity; if not, ask the profile
-        // endpoint so we can key/label the account.
-        if token.accountUUID == nil, token.accountEmail == nil,
+        // The token response usually carries identity; if the UUID is missing, ask the
+        // profile endpoint — the account key is the UUID, so resolving it up front keeps
+        // the key (and the config keyed by it) stable across future refreshes.
+        if token.accountUUID == nil,
            let id = try? await ClaudeUsageAPI().fetchProfile(accessToken: token.accessToken) {
-            token.accountEmail = id.email
+            token.accountEmail = token.accountEmail ?? id.email
             token.accountUUID = id.accountUuid
-            token.orgUUID = id.orgUuid
+            token.orgUUID = token.orgUUID ?? id.orgUuid
         }
         await shared.store(token)
         return token
@@ -108,5 +132,6 @@ public actor ClaudeTokenProvider {
     public func signOut(account: String) {
         ClaudeTokenStore.delete(account: account)
         cache[account] = nil
+        usageCache[account] = nil
     }
 }

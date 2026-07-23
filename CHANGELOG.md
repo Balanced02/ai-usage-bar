@@ -11,6 +11,26 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-23
+
+### Changed
+- **Claude accounts are now just what you sign into — no more path scanning.** The app no longer
+  auto-discovers Claude "profiles" by reading `CLAUDE_CONFIG_DIR` from your shell config. Each account
+  is one you add via **Add account** (browser sign-in), and you can give it your own **name** in
+  Settings → Claude.
+
+### Added
+- **Per-account cost, opt-in.** Type a logs-folder path (e.g. `~/.claude`) into an account's **Cost
+  logs** field to show its $ equivalent-cost, token totals, and plan; leave it blank for live limits
+  only. There is no cost API — cost is derived from local logs, so each account points at its own
+  folder (which keeps cost attributed to the right account).
+
+### Fixed
+- Renaming an account or changing its cost folder no longer risks **rate-limiting** the usage endpoint:
+  a per-account usage cache means those changes re-render without re-calling the endpoint, and the name
+  / path fields commit on blur, not on every keystroke.
+- Removed a stale "Copy sign-in command" hint left over from the pre-OAuth design.
+
 ## [0.2.0] - 2026-07-16
 
 ### Changed

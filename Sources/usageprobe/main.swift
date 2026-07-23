@@ -40,21 +40,27 @@ case "codex":
 case "gemini":
     print(fmt(GeminiReader().read()))
 case "claude":
-    let profiles = UsageConfig.autoDetect().claudeProfiles
-    let results = await ClaudeReader(profiles: profiles).read()
-    print(results.map(fmt).joined(separator: "\n\n"))
+    // The CLI can't do OAuth (its code signature differs from the app's, so it can't
+    // read the app's Keychain token), so it shows local cost per discovered config
+    // dir rather than live limits. Live 5H/7D % needs the app's Add-account sign-in.
+    for p in ClaudeProfileDiscovery.discover() {
+        let cost = ClaudeCostReader.summary(configDir: p.configDir)
+        let usd = cost.map { "$" + String(format: "%.2f", $0.monthUSD) } ?? "-"
+        print("• \(p.name)  dir=\(p.configDir.path)  30d=\(usd)  tokens=\(cost?.totalTokens ?? 0)")
+    }
+    print("(live 5H/7D % requires the app's OAuth sign-in)")
 case "profiles":
     for p in ClaudeProfileDiscovery.discover() {
         let a = ClaudeAccountLoader.load(p)
         print("• \(p.name.padding(toLength: 10, withPad: " ", startingAt: 0)) dir=\(p.configDir.path)  default=\(p.isDefault)  email=\(a?.emailAddress ?? "-")  plan=\(a?.planLabel ?? "-")")
     }
 case "all":
-    let service = UsageService(config: .autoDetect())
+    let service = UsageService(config: UsageConfig())
     let results = await service.refresh()
     print(results.map(fmt).joined(separator: "\n\n"))
 case "statusline":
     // One compact line for a shell prompt / Claude Code statusLine.
-    let results = await UsageService(config: .autoDetect()).refresh()
+    let results = await UsageService(config: UsageConfig()).refresh()
     var parts: [String] = []
     for kind in [ProviderKind.codex, .claude, .gemini] {
         let pct = results.filter { $0.kind == kind }.compactMap { $0.maxUsedPercent }.max()

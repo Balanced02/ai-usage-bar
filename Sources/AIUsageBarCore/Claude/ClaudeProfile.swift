@@ -83,7 +83,26 @@ public struct ClaudeAccount: Codable, Sendable, Hashable {
 public enum ClaudeAccountLoader {
     /// Reads the `oauthAccount` block from a profile's `.claude.json`.
     public static func load(_ profile: ClaudeProfile) -> ClaudeAccount? {
-        guard let data = try? Data(contentsOf: profile.dotClaudeJSON),
+        load(dotClaudeJSON: profile.dotClaudeJSON)
+    }
+
+    /// Reads identity/plan from a Claude **config dir** — used by the account-driven
+    /// model when the user points an account at its logs. `.claude.json` lives inside
+    /// a custom config dir but at `~/.claude.json` for the default `~/.claude`, so try
+    /// both.
+    public static func load(configDir: URL) -> ClaudeAccount? {
+        if let a = load(dotClaudeJSON: configDir.appendingPathComponent(".claude.json")) { return a }
+        // Only the default ~/.claude keeps its .claude.json at the home root — don't
+        // apply that fallback to other dirs, or an account whose logs dir lacks a
+        // .claude.json would inherit the default account's plan (a cross-account mislabel).
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        guard configDir.standardizedFileURL == home.appendingPathComponent(".claude").standardizedFileURL
+        else { return nil }
+        return load(dotClaudeJSON: home.appendingPathComponent(".claude.json"))
+    }
+
+    public static func load(dotClaudeJSON url: URL) -> ClaudeAccount? {
+        guard let data = try? Data(contentsOf: url),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let oa = root["oauthAccount"] as? [String: Any]
         else { return nil }

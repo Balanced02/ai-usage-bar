@@ -1,13 +1,15 @@
 import Foundation
 
-/// Which providers to read and how the Claude profiles are configured.
+/// Which providers to read and how Claude accounts are configured.
 public struct UsageConfig: Sendable {
     public var codexEnabled: Bool
     public var claudeEnabled: Bool
     public var geminiEnabled: Bool
     public var codexHome: URL?
     public var geminiHome: URL?
-    public var claudeProfiles: [ClaudeProfile]
+    /// Per-account user config (name + optional logs dir), keyed by account key.
+    /// Accounts themselves come from the OAuth token store, not path discovery.
+    public var claudeAccountConfigs: [String: ClaudeAccountConfig]
     public var customProviders: [CustomProviderConfig]
     /// Minimum seconds between live Claude endpoint calls (avoids 429s).
     public var claudeMinInterval: TimeInterval
@@ -15,23 +17,18 @@ public struct UsageConfig: Sendable {
 
     public init(codexEnabled: Bool = true, claudeEnabled: Bool = true, geminiEnabled: Bool = true,
                 codexHome: URL? = nil, geminiHome: URL? = nil,
-                claudeProfiles: [ClaudeProfile] = [], customProviders: [CustomProviderConfig] = [],
+                claudeAccountConfigs: [String: ClaudeAccountConfig] = [:],
+                customProviders: [CustomProviderConfig] = [],
                 claudeMinInterval: TimeInterval = 180, allowKeychain: Bool = true) {
         self.codexEnabled = codexEnabled
         self.claudeEnabled = claudeEnabled
         self.geminiEnabled = geminiEnabled
         self.codexHome = codexHome
         self.geminiHome = geminiHome
-        self.claudeProfiles = claudeProfiles
+        self.claudeAccountConfigs = claudeAccountConfigs
         self.customProviders = customProviders
         self.claudeMinInterval = claudeMinInterval
         self.allowKeychain = allowKeychain
-    }
-
-    /// Detects the default `~/.claude` profile plus any `CLAUDE_CONFIG_DIR`
-    /// profiles defined by shell aliases/exports (e.g. a `claude-work` alias).
-    public static func autoDetect() -> UsageConfig {
-        UsageConfig(claudeProfiles: ClaudeProfileDiscovery.discover())
     }
 }
 
@@ -47,10 +44,10 @@ public actor UsageService {
     }
 
     public func update(config: UsageConfig) {
-        let profilesChanged = self.config.claudeProfiles != config.claudeProfiles
+        let accountsChanged = self.config.claudeAccountConfigs != config.claudeAccountConfigs
         self.config = config
-        if profilesChanged { claudeCache = [] }
-        // Force a Claude refresh on next call if the profile set changed.
+        if accountsChanged { claudeCache = [] }
+        // Force a Claude refresh on next call if the account config changed.
         lastClaudeFetch = nil
     }
 
@@ -81,8 +78,8 @@ public actor UsageService {
     /// Offline identity-only placeholder cards, shown instantly while the live
     /// Claude data is still loading.
     public func claudePlaceholders() -> [ProviderUsage] {
-        guard config.claudeEnabled else { return [] }
-        return config.claudeProfiles.map { ClaudeReader.placeholder(for: $0) }
+        guard config.claudeEnabled, config.allowKeychain else { return [] }
+        return ClaudeReader.placeholders(configs: config.claudeAccountConfigs)
     }
 
     private func claude(now: Date) async -> [ProviderUsage] {
@@ -91,7 +88,7 @@ public actor UsageService {
            !claudeCache.isEmpty {
             return claudeCache
         }
-        let reader = ClaudeReader(profiles: config.claudeProfiles, allowKeychain: config.allowKeychain)
+        let reader = ClaudeReader(accountConfigs: config.claudeAccountConfigs, allowKeychain: config.allowKeychain)
         let result = await reader.read()
         // Keep any previous window data if a refresh degraded to no-data (endpoint blip).
         claudeCache = result

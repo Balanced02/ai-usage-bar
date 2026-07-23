@@ -12,6 +12,13 @@ public struct ClaudeTokenActivity: Sendable, Hashable {
 /// Sums `message.usage` tokens over trailing 5h / 7d wall-clock windows from
 /// `<configDir>/projects/**/*.jsonl`, deduped by message id + request id.
 public enum ClaudeJSONLReader {
+    /// Local activity from a Claude **config dir** (reads its `projects/`).
+    public static func activity(configDir: URL, now: Date = Date(),
+                                maxFiles: Int = 40) -> ClaudeTokenActivity? {
+        activity(for: ClaudeProfile(name: configDir.lastPathComponent, configDir: configDir, isDefault: false),
+                 now: now, maxFiles: maxFiles)
+    }
+
     public static func activity(for profile: ClaudeProfile,
                                 now: Date = Date(),
                                 maxFiles: Int = 40) -> ClaudeTokenActivity? {
