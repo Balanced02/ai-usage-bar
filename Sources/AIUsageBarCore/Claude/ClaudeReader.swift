@@ -1,138 +1,90 @@
 import Foundation
 
-/// Produces one `ProviderUsage` per Claude account/profile.
+/// Produces one `ProviderUsage` per **signed-in Claude account** (from our own OAuth
+/// store — never Claude Code's Keychain, so nothing prompts). There is no path
+/// auto-discovery: accounts come from `Add account`, and each carries a user config
+/// (`ClaudeAccountConfig`: name + optional logs dir).
 ///
-/// Token source is our **own** OAuth store (`ClaudeTokenProvider`) — never Claude
-/// Code's Keychain item — so nothing prompts for Keychain access. Strategy:
-///   1. Identity/cost/local-activity from local files — always available offline.
-///   2. Live windows from `GET /api/oauth/usage` using a token we minted, when the
-///      account has been added (Settings → Claude → Add account).
-///   3. Tokens carry their own account identity, so they map to a configured
-///      profile locally (no profile round-trip). A signed-in account with no local
-///      profile still gets a live-only card.
+/// Per account:
+///   - Identity (email) from the OAuth token; a friendly name from the config.
+///   - Live 5H/7D windows from `GET /api/oauth/usage`.
+///   - Cost + plan **only when** the account is pointed at a logs folder (there is no
+///     cost API — it comes from local `~/.claude` JSONL). Otherwise: live limits only.
 public struct ClaudeReader: Sendable {
-    public var profiles: [ClaudeProfile]
+    /// Per-account user config, keyed by `ClaudeTokenStore.accountKey`.
+    public var accountConfigs: [String: ClaudeAccountConfig]
     public var api: ClaudeUsageAPI
     /// Gates live/token access. Off for the CLI probe and unit tests.
     public var allowKeychain: Bool
     /// Injected tokens for tests (used when `allowKeychain` is false).
     public var tokens: [ClaudeOAuthToken]
 
-    public init(profiles: [ClaudeProfile], api: ClaudeUsageAPI = ClaudeUsageAPI(),
+    public init(accountConfigs: [String: ClaudeAccountConfig] = [:], api: ClaudeUsageAPI = ClaudeUsageAPI(),
                 allowKeychain: Bool = true, tokens: [ClaudeOAuthToken] = []) {
-        self.profiles = profiles
+        self.accountConfigs = accountConfigs
         self.api = api
         self.allowKeychain = allowKeychain
         self.tokens = tokens
     }
 
-    /// An identity-only card (no windows) to show instantly while live data loads.
-    public static func placeholder(for profile: ClaudeProfile) -> ProviderUsage {
-        let account = ClaudeAccountLoader.load(profile)
-        return ProviderUsage(
-            id: "claude:\(profile.name.lowercased())",
-            kind: .claude,
-            displayName: "Claude — \(profile.name)",
-            accountLabel: account?.emailAddress ?? account?.displayName,
-            planType: account?.planLabel,
-            status: .noData,
-            detail: "Loading…",
-            sourcePath: profile.configDir.path
-        )
+    /// Identity-only cards from the stored accounts, shown instantly while live loads.
+    public static func placeholders(configs: [String: ClaudeAccountConfig]) -> [ProviderUsage] {
+        ClaudeTokenProvider.shared.accounts().map { token in
+            let key = ClaudeTokenStore.accountKey(for: token)
+            return ProviderUsage(
+                id: "claude:\(key)", kind: .claude,
+                displayName: "Claude — \(configs[key]?.name ?? token.accountEmail ?? "Account")",
+                accountLabel: token.accountEmail,
+                status: .noData, detail: "Loading…", sourcePath: configs[key]?.logsDir)
+        }
     }
 
     public func read() async -> [ProviderUsage] {
         let live = allowKeychain ? await ClaudeTokenProvider.shared.validTokens() : tokens
-
-        // Bind each token to the best-matching profile by the identity it carries.
-        var tokenForProfile: [String: ClaudeOAuthToken] = [:]
-        var usedTokens = Set<Int>()
-        for profile in profiles {
-            let account = ClaudeAccountLoader.load(profile)
-            if let hit = live.enumerated().first(where: { entry in
-                !usedTokens.contains(entry.offset) && Self.identityMatches(entry.element, account)
-            }) {
-                tokenForProfile[profile.id] = hit.element
-                usedTokens.insert(hit.offset)
-            }
-        }
-        // Exactly one profile and one token, unmatched: no ambiguity, pair them.
-        // (Requires live.count == 1 — with 2+ tokens we'd bind an arbitrary one and
-        // drop the others' cards.)
-        if profiles.count == 1, live.count == 1, tokenForProfile.isEmpty, let only = live.first {
-            tokenForProfile[profiles[0].id] = only
-            usedTokens.insert(0)
-        }
-
         var results: [ProviderUsage] = []
-        for profile in profiles {
-            results.append(await readProfile(profile, token: tokenForProfile[profile.id]))
-        }
-        // Signed-in accounts with no local profile → live-only cards.
-        for entry in live.enumerated() where !usedTokens.contains(entry.offset) {
-            results.append(await readAccountOnly(entry.element))
+        for token in live {
+            results.append(await readAccount(token))
         }
         return results
     }
 
-    static func identityMatches(_ token: ClaudeOAuthToken, _ account: ClaudeAccount?) -> Bool {
-        guard let account else { return false }
-        // Precise per-account identifiers are definitive: when both sides carry one,
-        // it settles the match (== true / != false). A shared organization UUID is
-        // only a last resort — two accounts in one org share it, so matching on org
-        // alone would bind a token to the wrong same-org profile.
-        if let a = token.accountUUID, let b = account.accountUuid { return a == b }
-        if let a = token.accountEmail?.lowercased(), let b = account.emailAddress?.lowercased() { return a == b }
-        if let a = token.orgUUID, let b = account.organizationUuid { return a == b }
-        return false
-    }
+    private func readAccount(_ token: ClaudeOAuthToken) async -> ProviderUsage {
+        let key = ClaudeTokenStore.accountKey(for: token)
+        let config = accountConfigs[key]
+        let logsURL = config?.logsURL
+        let name = config?.name ?? token.accountEmail ?? "Account"
+        let id = "claude:\(key)"
 
-    private func readProfile(_ profile: ClaudeProfile, token: ClaudeOAuthToken?) async -> ProviderUsage {
-        let account = ClaudeAccountLoader.load(profile)
-        let label = account?.emailAddress ?? account?.displayName
-        let plan = account?.planLabel
-        let id = "claude:\(profile.name.lowercased())"
+        // Cost + plan come only from a configured logs folder (no cost API exists).
+        let cost: CostSummary? = await {
+            guard let logsURL else { return nil }
+            return await Task.detached(priority: .utility) {
+                ClaudeCostReader.summary(configDir: logsURL)
+            }.value
+        }()
+        let plan = logsURL.flatMap { ClaudeAccountLoader.load(configDir: $0)?.planLabel }
 
-        let cost = await Task.detached(priority: .utility) {
-            ClaudeCostReader.summary(for: profile)
-        }.value
-
-        func base(status: UsageStatus, windows: [UsageWindow] = [], tokens: TokenStats? = nil,
-                  detail: String? = nil, updated: Date? = nil) -> ProviderUsage {
-            ProviderUsage(id: id, kind: .claude, displayName: "Claude — \(profile.name)",
-                          accountLabel: label, planType: plan, windows: windows, tokens: tokens,
-                          cost: cost, status: status, detail: detail, lastUpdated: updated,
-                          sourcePath: profile.configDir.path)
-        }
-
-        if let token {
-            return await live(token: token, base: base) {
-                self.activityOrError(profile, base: base, note: $0)
-            }
-        }
-        return activityOrError(profile, base: base, note: "Add a Claude account to see live limits")
-    }
-
-    /// A live-only card for a signed-in account that has no local profile/logs.
-    private func readAccountOnly(_ token: ClaudeOAuthToken) async -> ProviderUsage {
-        let name = token.accountEmail ?? "Account"
-        let id = "claude:oauth:\(ClaudeTokenStore.accountKey(for: token))"
         func base(status: UsageStatus, windows: [UsageWindow] = [], tokens: TokenStats? = nil,
                   detail: String? = nil, updated: Date? = nil) -> ProviderUsage {
             ProviderUsage(id: id, kind: .claude, displayName: "Claude — \(name)",
-                          accountLabel: token.accountEmail, planType: nil, windows: windows,
-                          tokens: tokens, cost: nil, status: status, detail: detail,
-                          lastUpdated: updated, sourcePath: nil)
+                          accountLabel: token.accountEmail, planType: plan, windows: windows,
+                          tokens: tokens, cost: cost, status: status, detail: detail,
+                          lastUpdated: updated, sourcePath: config?.logsDir)
         }
-        return await live(token: token, base: base) { base(status: .notConfigured, detail: $0) }
+
+        return await live(token: token, key: key, base: base) { note in
+            self.activityFallback(logsURL: logsURL, base: base, note: note)
+        }
     }
 
-    /// Shared live-fetch: hits the usage endpoint and maps errors to a fallback.
-    private func live(token: ClaudeOAuthToken,
+    /// Shared live-fetch: usage endpoint (cached per account when live), errors → fallback.
+    private func live(token: ClaudeOAuthToken, key: String,
                       base: (UsageStatus, [UsageWindow], TokenStats?, String?, Date?) -> ProviderUsage,
                       fallback: (String) -> ProviderUsage) async -> ProviderUsage {
         do {
-            let usage = try await api.fetch(accessToken: token.accessToken)
+            let usage = allowKeychain
+                ? try await ClaudeTokenProvider.shared.cachedUsage(key: key, accessToken: token.accessToken, api: api)
+                : try await api.fetch(accessToken: token.accessToken)
             let windows = usage.windows.sorted { ($0.windowMinutes ?? .max) < ($1.windowMinutes ?? .max) }
             var u = base(windows.isEmpty ? .noData : .ok, windows,
                          nil, windows.isEmpty ? "No active usage windows" : nil, Date())
@@ -142,19 +94,20 @@ public struct ClaudeReader: Sendable {
             return u
         } catch let ClaudeAPIError.rateLimited(retry) {
             let hint = retry.map { " (retry \(Int($0))s)" } ?? ""
-            return fallback("Rate limited\(hint) — using local activity")
+            return fallback("Rate limited\(hint)")
         } catch ClaudeAPIError.unauthorized {
             return fallback("Session expired — reconnect this account")
         } catch {
-            return fallback("Endpoint unavailable — using local activity")
+            return fallback("Endpoint unavailable")
         }
     }
 
-    /// Fall back to local token activity; if there's none, report the note.
-    private func activityOrError(_ profile: ClaudeProfile,
-                                 base: (UsageStatus, [UsageWindow], TokenStats?, String?, Date?) -> ProviderUsage,
-                                 note: String) -> ProviderUsage {
-        if let act = ClaudeJSONLReader.activity(for: profile) {
+    /// On a live failure, fall back to local activity from the configured logs (if
+    /// any); otherwise just surface the note.
+    private func activityFallback(logsURL: URL?,
+                                  base: (UsageStatus, [UsageWindow], TokenStats?, String?, Date?) -> ProviderUsage,
+                                  note: String) -> ProviderUsage {
+        if let logsURL, let act = ClaudeJSONLReader.activity(configDir: logsURL) {
             let tokens = TokenStats(totalTokens: act.sevenDayTokens)
             return base(.ok, [], tokens, note + " · " + Self.tokenNote(act), act.lastActivity)
         }

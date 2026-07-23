@@ -4,6 +4,18 @@ import Foundation
 /// logs: totals for today / last 30 days, split by model and by repo, plus
 /// cache-efficiency. Pure and Sendable so it can run off the main actor.
 public enum ClaudeCostReader {
+    /// Cost from a Claude **config dir** (the folder containing `projects/`), for the
+    /// account-driven model where the user points an account at its logs. Only
+    /// `projects/` is read; the dir's identity/`.claude.json` is not used.
+    public static func summary(configDir: URL,
+                               now: Date = Date(),
+                               maxFiles: Int = 400,
+                               maxFileBytes: Int = 40_000_000,
+                               cacheDirectory: URL? = nil) -> CostSummary? {
+        summary(for: ClaudeProfile(name: configDir.lastPathComponent, configDir: configDir, isDefault: false),
+                now: now, maxFiles: maxFiles, maxFileBytes: maxFileBytes, cacheDirectory: cacheDirectory)
+    }
+
     public static func summary(for profile: ClaudeProfile,
                                now: Date = Date(),
                                maxFiles: Int = 400,

@@ -105,34 +105,11 @@ final class ClaudeOAuthTests: XCTestCase {
         XCTAssertEqual(ClaudeOAuthLoopback.parse(noCode), .ignore)
     }
 
-    // MARK: Identity mapping
+    // MARK: Account config
 
-    func testIdentityMatchesByEmailOrgOrAccount() {
-        let acct = ClaudeAccount(emailAddress: "You@Example.com", accountUuid: "acc-9", organizationUuid: "org-9")
-        XCTAssertTrue(ClaudeReader.identityMatches(
-            ClaudeOAuthToken(accessToken: "t", accountEmail: "you@example.com"), acct))   // case-insensitive
-        XCTAssertTrue(ClaudeReader.identityMatches(
-            ClaudeOAuthToken(accessToken: "t", orgUUID: "org-9"), acct))
-        XCTAssertTrue(ClaudeReader.identityMatches(
-            ClaudeOAuthToken(accessToken: "t", accountUUID: "acc-9"), acct))
-        XCTAssertFalse(ClaudeReader.identityMatches(
-            ClaudeOAuthToken(accessToken: "t", accountEmail: "other@example.com"), acct))
-        XCTAssertFalse(ClaudeReader.identityMatches(ClaudeOAuthToken(accessToken: "t"), nil))
-    }
-
-    func testIdentitySharedOrgDoesNotMisbind() {
-        // Two accounts in the SAME org must not match on org UUID when their precise
-        // per-account identifiers differ (else a token binds to the wrong profile).
-        let acctA = ClaudeAccount(accountUuid: "acc-A", organizationUuid: "org-shared")
-        let tokenB = ClaudeOAuthToken(accessToken: "t", accountUUID: "acc-B", orgUUID: "org-shared")
-        XCTAssertFalse(ClaudeReader.identityMatches(tokenB, acctA))
-        // Same-email in the shared org still matches.
-        let acctEmail = ClaudeAccount(emailAddress: "a@example.com", organizationUuid: "org-shared")
-        let tokenEmail = ClaudeOAuthToken(accessToken: "t", accountEmail: "a@example.com", orgUUID: "org-shared")
-        XCTAssertTrue(ClaudeReader.identityMatches(tokenEmail, acctEmail))
-        // Org-only match survives when no precise field is comparable on both sides.
-        let acctOrgOnly = ClaudeAccount(organizationUuid: "org-shared")
-        let tokenOrgOnly = ClaudeOAuthToken(accessToken: "t", orgUUID: "org-shared")
-        XCTAssertTrue(ClaudeReader.identityMatches(tokenOrgOnly, acctOrgOnly))
+    func testAccountConfigLogsURL() {
+        XCTAssertNil(ClaudeAccountConfig().logsURL)
+        XCTAssertEqual(ClaudeAccountConfig(logsDir: "/tmp/.claude").logsURL,
+                       URL(fileURLWithPath: "/tmp/.claude"))
     }
 }

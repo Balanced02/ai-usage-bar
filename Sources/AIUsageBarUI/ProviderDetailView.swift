@@ -99,11 +99,6 @@ struct AccountBlock: View {
         return false
     }
 
-    private var needsSignIn: Bool {
-        usage.kind == .claude && usage.windows.isEmpty &&
-        (usage.status == .notConfigured || (usage.detail?.contains("Not signed in") ?? false))
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             header
@@ -214,7 +209,6 @@ struct AccountBlock: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if needsSignIn { SignInHint(configDir: usage.sourcePath) }
         }
     }
 
@@ -299,34 +293,3 @@ struct WindowRow: View {
     }
 }
 
-/// Inline helper for a Claude profile that isn't signed into the Keychain.
-struct SignInHint: View {
-    let configDir: String?
-    @State private var copied = false
-
-    private var command: String {
-        guard let dir = configDir else { return "claude" }
-        return dir.hasSuffix("/.claude") ? "claude" : "CLAUDE_CONFIG_DIR=\(abbreviate(dir)) claude"
-    }
-
-    var body: some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(command + "   # then run /login", forType: .string)
-            copied = true
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                Text(copied ? "Copied — run it, then /login" : "Copy sign-in command")
-            }
-            .font(.caption2)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.blue)
-    }
-
-    private func abbreviate(_ path: String) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
-    }
-}

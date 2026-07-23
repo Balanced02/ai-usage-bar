@@ -50,8 +50,12 @@ Scripts/install-hooks.sh          # activate the pre-commit personal-data guard 
   serializes refreshes); `invalid_grant` on refresh is terminal → re-auth. Keychain gotcha:
   `kSecReturnData` + `kSecMatchLimitAll` in one query is `errSecParam` (-50) — list attributes, then
   read each item. Headers otherwise: `Authorization: Bearer`, `anthropic-beta: oauth-2025-04-20`.
-  Cache ≥ 180s. Config-dir profiles are still auto-discovered; live tokens are matched to them by
-  account email/UUID, and a signed-in account with no local profile gets its own live-only card.
+  Cache ≥ 180s (per-account usage cache in `ClaudeTokenProvider.cachedUsage`, so re-rendering after a
+  config change doesn't re-hit the endpoint). **No path auto-discovery**: accounts are exactly the
+  OAuth sign-ins, each with a user config (`ClaudeAccountConfig`: name + optional logs dir). Cost +
+  plan are opt-in per account — shown only when its `logsDir` points at a config dir (`ClaudeCostReader
+  .summary(configDir:)`; `.claude.json` is at `<dir>/.claude.json` except the default `~/.claude` →
+  `~/.claude.json`). `ClaudeProfileDiscovery` survives for the `usageprobe` CLI only.
 - **Cost** — subscriptions have no per-token bill, so cost is an **equivalent API cost**:
   local JSONL token counts × per-model pricing (`Pricing.swift`).
 - **Gemini** — detection only; no local live quota exists.

@@ -10,14 +10,12 @@ import AIUsageBarCore
 public struct SettingsView: View {
     @Bindable private var model: AppModel
     @State private var draft: SettingsDraft
-    @State private var detectedProfiles: [ClaudeProfile]
     @State private var errorMessage: String?
 
     @MainActor
     public init(model: AppModel) {
         self.model = model
         _draft = State(initialValue: model.settingsDraft())
-        _detectedProfiles = State(initialValue: model.automaticClaudeProfiles())
     }
 
     public var body: some View {
@@ -41,14 +39,7 @@ public struct SettingsView: View {
     private var claudeSection: some View {
         Section("Claude") {
             ForEach(model.claudeAccounts) { account in
-                LabeledContent {
-                    Button("Remove") { model.removeClaudeAccount(account.key) }
-                        .foregroundStyle(.red)
-                } label: {
-                    Label(account.label, systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.primary)
-                        .labelStyle(.titleAndIcon)
-                }
+                ClaudeAccountRow(account: account, model: model)
             }
             LabeledContent("Account") {
                 if model.signingInClaude {
@@ -65,10 +56,11 @@ public struct SettingsView: View {
             if let err = model.claudeSignInError {
                 Text(err).font(.caption).foregroundStyle(.red)
             }
-            Text("Sign in with Claude to show live 5-hour and weekly limits. The app mints its own token and stores it in its own Keychain item, so macOS never prompts for access to Claude Code's credentials. Your account and cost show without signing in.")
+            Text("Sign in with Claude to show live 5-hour and weekly limits — the app mints its own token, so macOS never prompts. Point an account at its logs folder to also show $ cost (there's no cost API; it's read from local logs).")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
+
 
     private var generalSection: some View {
         Section("General") {
@@ -124,38 +116,6 @@ public struct SettingsView: View {
                 choose: chooseGeminiFolder,
                 reset: { draft.providerSettings.geminiHome = nil }
             )
-
-            Divider()
-
-            Text("Automatic Claude profiles")
-                .font(.subheadline.weight(.semibold))
-
-            if detectedProfiles.isEmpty {
-                Text("No Claude profiles detected.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(detectedProfiles) { profile in
-                    detectedProfileRow(profile)
-                }
-            }
-
-            Button("Rescan", action: rescanProfiles)
-
-            Divider()
-
-            Text("Manual Claude profiles")
-                .font(.subheadline.weight(.semibold))
-
-            if draft.providerSettings.manualClaudeProfiles.isEmpty {
-                Text("Add a named profile to use another Claude configuration folder.")
-                    .foregroundStyle(.secondary)
-            }
-
-            ForEach($draft.providerSettings.manualClaudeProfiles) { profile in
-                manualProfileRow(profile)
-            }
-
-            Button("Add profile", action: addProfile)
         }
     }
 
@@ -244,42 +204,6 @@ public struct SettingsView: View {
         }
     }
 
-    private func detectedProfileRow(_ profile: ClaudeProfile) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(profile.name)
-                if profile.isDefault {
-                    Text("Default")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Text(profile.configDir.path)
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-    }
-
-    private func manualProfileRow(_ profile: Binding<ManualClaudeProfile>) -> some View {
-        let id = profile.wrappedValue.id
-        return VStack(alignment: .leading, spacing: 6) {
-            TextField("Name", text: profile.name)
-            Text(profile.wrappedValue.configDir.path)
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            HStack {
-                Button("Choose folder") { chooseClaudeFolder(id: id) }
-                Button("Remove", role: .destructive) {
-                    draft.providerSettings.manualClaudeProfiles.removeAll { $0.id == id }
-                }
-            }
-        }
-    }
-
     private func chooseCodexFolder() {
         chooseFolder(title: "Choose Codex data folder") { url in
             draft.providerSettings.codexHome = url
@@ -289,14 +213,6 @@ public struct SettingsView: View {
     private func chooseGeminiFolder() {
         chooseFolder(title: "Choose Gemini data folder") { url in
             draft.providerSettings.geminiHome = url
-        }
-    }
-
-    private func chooseClaudeFolder(id: UUID) {
-        chooseFolder(title: "Choose Claude profile folder") { url in
-            guard let index = draft.providerSettings.manualClaudeProfiles.firstIndex(where: { $0.id == id })
-            else { return }
-            draft.providerSettings.manualClaudeProfiles[index].configDir = url
         }
     }
 
@@ -313,19 +229,6 @@ public struct SettingsView: View {
         onChoose(url.standardizedFileURL)
     }
 
-    private func addProfile() {
-        draft.providerSettings.manualClaudeProfiles.append(
-            ManualClaudeProfile(
-                name: "New profile",
-                configDir: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
-            )
-        )
-    }
-
-    private func rescanProfiles() {
-        detectedProfiles = model.automaticClaudeProfiles()
-    }
-
     private func applyDraft() {
         let draftToApply = draft
         Task { @MainActor in
@@ -338,7 +241,78 @@ public struct SettingsView: View {
 
     private func resetFromModel() {
         draft = model.settingsDraft()
-        detectedProfiles = model.automaticClaudeProfiles()
         errorMessage = nil
+    }
+}
+
+/// One signed-in Claude account: an editable name and a typed cost-logs path (both
+/// committed on blur/Enter, never per-keystroke — per-keystroke would re-hit the
+/// usage endpoint on every character).
+struct ClaudeAccountRow: View {
+    let account: ClaudeAccountSummary
+    let model: AppModel
+    @State private var draftName: String = ""
+    @State private var draftLogs: String = ""
+    @FocusState private var nameFocused: Bool
+    @FocusState private var logsFocused: Bool
+
+    /// The custom name as edited ("" = no custom name → falls back to the email).
+    private var currentName: String { account.name ?? "" }
+    /// The logs path as typed (tilde-abbreviated), "" = cost off.
+    private var currentLogs: String {
+        account.logsDir.map { ($0 as NSString).abbreviatingWithTildeInPath } ?? ""
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                // Email is the placeholder — an empty field means "use the email".
+                TextField(account.email ?? "Name", text: $draftName)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 160)
+                    .focused($nameFocused)
+                    .onSubmit(commitName)
+                    .onChange(of: nameFocused) { _, focused in if !focused { commitName() } }
+                if let email = account.email, account.name != nil {
+                    Text(email).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+                Button("Remove", role: .destructive) { model.removeClaudeAccount(account.key) }
+            }
+            HStack(spacing: 6) {
+                Text("Cost logs").font(.caption).foregroundStyle(.secondary)
+                TextField("~/.claude   (blank = cost off)", text: $draftLogs)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption.monospaced())
+                    .focused($logsFocused)
+                    .onSubmit(commitLogs)
+                    .onChange(of: logsFocused) { _, focused in if !focused { commitLogs() } }
+                Button("~/.claude") { draftLogs = "~/.claude"; commitLogs() }
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 2)
+        .onAppear { draftName = currentName; draftLogs = currentLogs }
+        .onChange(of: account) { _, _ in
+            if !nameFocused { draftName = currentName }
+            if !logsFocused { draftLogs = currentLogs }
+        }
+    }
+
+    private func commitName() {
+        let trimmed = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Empty, or literally the email, means "no custom name" → store nothing.
+        let newName = (trimmed.isEmpty ||
+                       trimmed.caseInsensitiveCompare(account.email ?? "\u{0}") == .orderedSame) ? "" : trimmed
+        guard newName != currentName else { return }   // only when actually changed
+        draftName = newName                            // reflect the normalization
+        model.renameClaudeAccount(account.key, to: newName)
+    }
+
+    private func commitLogs() {
+        let trimmed = draftLogs.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expanded = trimmed.isEmpty ? nil : (trimmed as NSString).expandingTildeInPath
+        guard expanded != account.logsDir else { return }
+        model.setClaudeAccountLogs(account.key, dir: expanded)
     }
 }
