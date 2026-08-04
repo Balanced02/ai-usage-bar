@@ -11,6 +11,19 @@
     <!-- Newest release first. Fill edSignature + length from the Release
          workflow's "Sign update for Sparkle" step output. -->
     <item>
+      <title>0.3.1</title>
+      <pubDate>Tue, 04 Aug 2026 13:57:00 +0000</pubDate>
+      <sparkle:version>0.3.1</sparkle:version>
+      <sparkle:shortVersionString>0.3.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[Reopening the app now shows your last-known 5H/7D % instantly, then refreshes — no more blank "Loading…" while the usage endpoint responds.]]></description>
+      <enclosure
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.3.1/AIUsageBar-v0.3.1.zip"
+        sparkle:edSignature="DnLLO+K3wl3DD0+BE18h8t07OTSxsTQvIOU8YATbPSrSAhJ/PckI7yWFo0lZHBYSepDZxBnLq5jFnIwmTGCEBw=="
+        length="2135363"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>0.3.0</title>
       <pubDate>Thu, 23 Jul 2026 12:08:00 +0000</pubDate>
       <sparkle:version>0.3.0</sparkle:version>
