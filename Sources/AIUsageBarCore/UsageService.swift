@@ -90,9 +90,10 @@ public actor UsageService {
         }
         let reader = ClaudeReader(accountConfigs: config.claudeAccountConfigs, allowKeychain: config.allowKeychain)
         let result = await reader.read()
-        // Keep any previous window data if a refresh degraded to no-data (endpoint blip).
         claudeCache = result
         lastClaudeFetch = now
+        // Persist live windows so a relaunch shows the last-known % instantly.
+        if config.allowKeychain { ClaudeSnapshotStore.persist(cards: result, now: now) }
         return result
     }
 }

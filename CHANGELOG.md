@@ -11,6 +11,13 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-04
+
+### Added
+- **Instant limits on relaunch.** Each account's last live 5H/7D windows are saved to disk, so
+  reopening the app shows the previous % right away (marked "updated Nm ago") while the fresh
+  numbers load, instead of an empty "Loading…" until the usage endpoint responds.
+
 ## [0.3.0] - 2026-07-23
 
 ### Changed

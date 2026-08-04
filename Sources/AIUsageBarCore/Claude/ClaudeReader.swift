@@ -27,14 +27,23 @@ public struct ClaudeReader: Sendable {
         self.tokens = tokens
     }
 
-    /// Identity-only cards from the stored accounts, shown instantly while live loads.
+    /// Cards shown instantly while live data loads. Reuses each account's last-known
+    /// windows from disk (stale, timestamped) so the % is visible immediately on
+    /// relaunch instead of an empty "Loading…" until the slow endpoint responds.
     public static func placeholders(configs: [String: ClaudeAccountConfig]) -> [ProviderUsage] {
-        ClaudeTokenProvider.shared.accounts().map { token in
+        let snapshots = ClaudeSnapshotStore.load()
+        return ClaudeTokenProvider.shared.accounts().map { token in
             let key = ClaudeTokenStore.accountKey(for: token)
+            let id = "claude:\(key)"
+            let displayName = "Claude — \(configs[key]?.name ?? token.accountEmail ?? "Account")"
+            if let snap = snapshots[id], !snap.windows.isEmpty {
+                return ProviderUsage(
+                    id: id, kind: .claude, displayName: displayName, accountLabel: token.accountEmail,
+                    planType: snap.planType, windows: snap.windows, status: .ok, detail: snap.detail,
+                    lastUpdated: snap.updatedAt, sourcePath: configs[key]?.logsDir)
+            }
             return ProviderUsage(
-                id: "claude:\(key)", kind: .claude,
-                displayName: "Claude — \(configs[key]?.name ?? token.accountEmail ?? "Account")",
-                accountLabel: token.accountEmail,
+                id: id, kind: .claude, displayName: displayName, accountLabel: token.accountEmail,
                 status: .noData, detail: "Loading…", sourcePath: configs[key]?.logsDir)
         }
     }

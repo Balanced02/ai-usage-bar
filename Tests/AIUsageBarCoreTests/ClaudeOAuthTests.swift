@@ -112,4 +112,23 @@ final class ClaudeOAuthTests: XCTestCase {
         XCTAssertEqual(ClaudeAccountConfig(logsDir: "/tmp/.claude").logsURL,
                        URL(fileURLWithPath: "/tmp/.claude"))
     }
+
+    // MARK: Usage snapshot (instant last-known % on relaunch)
+
+    func testSnapshotsKeepOnlyLiveClaudeWindowCards() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let win = UsageWindow(kind: .fiveHour, usedPercent: 42, windowMinutes: 300, resetsAt: nil)
+        let live = ProviderUsage(id: "claude:acc-1", kind: .claude, displayName: "Claude — A",
+                                 planType: "Max", windows: [win], status: .ok, lastUpdated: now)
+        let degraded = ProviderUsage(id: "claude:acc-2", kind: .claude, displayName: "Claude — B",
+                                     status: .notConfigured, detail: "Rate limited")   // no windows → skip
+        let codex = ProviderUsage(id: "codex", kind: .codex, displayName: "Codex",
+                                  windows: [win], status: .ok)                          // not claude → skip
+
+        let snaps = ClaudeSnapshotStore.snapshots(from: [live, degraded, codex], now: now)
+        XCTAssertEqual(Set(snaps.keys), ["claude:acc-1"])
+        XCTAssertEqual(snaps["claude:acc-1"]?.windows, [win])
+        XCTAssertEqual(snaps["claude:acc-1"]?.planType, "Max")
+        XCTAssertEqual(snaps["claude:acc-1"]?.updatedAt, now)
+    }
 }
