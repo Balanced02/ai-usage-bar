@@ -4,21 +4,43 @@ import AIUsageBarCore
 
 /// The detail side: every account of the selected kind, stacked. Under "Claude"
 /// this shows Personal + Work together, each color-coded, with per-model windows.
+/// Reconnect wiring for expired Claude accounts, bundled so cards can offer the
+/// action and reflect its per-account state without threading many params.
+public struct ReconnectState {
+    public var perform: (String) -> Void
+    public var inProgressKey: String?   // account currently reconnecting (spinner)
+    public var busy: Bool               // any sign-in in flight → disable all
+    public var errorKey: String?        // account whose last reconnect failed
+    public var errorText: String?
+
+    public init(perform: @escaping (String) -> Void, inProgressKey: String? = nil,
+                busy: Bool = false, errorKey: String? = nil, errorText: String? = nil) {
+        self.perform = perform
+        self.inProgressKey = inProgressKey
+        self.busy = busy
+        self.errorKey = errorKey
+        self.errorText = errorText
+    }
+}
+
 public struct KindDetailView: View {
     public let cards: [ProviderUsage]
     /// Optional 24h sample lookup for sparklines.
     public var history: ((ProviderUsage, UsageWindow) -> [Double])?
     public var budget: Double
     public var masked: Bool
+    public var reconnect: ReconnectState?
 
     public init(cards: [ProviderUsage],
                 history: ((ProviderUsage, UsageWindow) -> [Double])? = nil,
                 budget: Double = 0,
-                masked: Bool = false) {
+                masked: Bool = false,
+                reconnect: ReconnectState? = nil) {
         self.cards = cards
         self.history = history
         self.budget = budget
         self.masked = masked
+        self.reconnect = reconnect
     }
 
     public var body: some View {
@@ -31,7 +53,7 @@ public struct KindDetailView: View {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
                     AccountBlock(usage: card, accent: Theme.accountColor(index),
                                  history: history.map { lookup in { window in lookup(card, window) } },
-                                 budget: budget, masked: masked)
+                                 budget: budget, masked: masked, reconnect: reconnect)
                 }
             }
         }
@@ -86,9 +108,15 @@ struct AccountBlock: View {
     var history: ((UsageWindow) -> [Double])? = nil
     var budget: Double = 0
     var masked: Bool = false
+    var reconnect: ReconnectState? = nil
 
     private var accountName: String {
         usage.displayName.components(separatedBy: " — ").last ?? usage.displayName
+    }
+
+    /// The account key = the card id without the "claude:" prefix.
+    private var accountKey: String {
+        usage.id.hasPrefix("claude:") ? String(usage.id.dropFirst("claude:".count)) : usage.id
     }
 
     private var isStale: Bool {
@@ -114,6 +142,30 @@ struct AccountBlock: View {
             } else {
                 VStack(spacing: 12) {
                     ForEach(usage.windows) { WindowRow(window: $0, accent: accent, samples: history?($0) ?? []) }
+                }
+            }
+
+            if usage.needsReconnect, let reconnect {
+                let inProgress = reconnect.inProgressKey == accountKey
+                VStack(alignment: .leading, spacing: 4) {
+                    Button {
+                        reconnect.perform(accountKey)
+                    } label: {
+                        HStack(spacing: 5) {
+                            if inProgress {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            Text(inProgress ? "Reconnecting…" : "Reconnect account")
+                        }
+                        .font(.caption2.weight(.medium))
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.small)
+                    .disabled(reconnect.busy)
+                    if reconnect.errorKey == accountKey, let msg = reconnect.errorText {
+                        Text(msg).font(.caption2).foregroundStyle(.red)
+                    }
                 }
             }
 

@@ -59,7 +59,8 @@ public enum ClaudeOAuth {
 
     /// The browser URL that starts the flow. `redirectURI` must be echoed
     /// byte-for-byte at exchange time — the #1 cause of exchange failures otherwise.
-    public static func authorizeURL(redirectURI: String, pkce: PKCE) -> URL {
+    /// `loginHint` (an email) pre-selects the account when reconnecting.
+    public static func authorizeURL(redirectURI: String, pkce: PKCE, loginHint: String? = nil) -> URL {
         var c = URLComponents(url: authorizeEndpoint, resolvingAgainstBaseURL: false)!
         c.queryItems = [
             .init(name: "code", value: "true"),          // show the Max upsell / code flow
@@ -71,6 +72,15 @@ public enum ClaudeOAuth {
             .init(name: "code_challenge_method", value: "S256"),
             .init(name: "state", value: pkce.state),
         ]
+        if let loginHint, !loginHint.isEmpty {
+            // URLComponents.queryItems leaves '+' literal, which the endpoint may decode
+            // to a space — encode it (and other query-significant chars) ourselves.
+            var allowed = CharacterSet.urlQueryAllowed
+            allowed.remove(charactersIn: "+&=?#%")
+            let encoded = loginHint.addingPercentEncoding(withAllowedCharacters: allowed) ?? loginHint
+            c.percentEncodedQueryItems = (c.percentEncodedQueryItems ?? []) +
+                [URLQueryItem(name: "login_hint", value: encoded)]
+        }
         return c.url!
     }
 

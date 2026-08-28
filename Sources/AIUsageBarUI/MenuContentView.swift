@@ -26,7 +26,13 @@ public struct MenuContentView: View {
                 KindDetailView(cards: model.cards(for: model.selectedKind),
                                history: { card, window in model.sparkline(card.id, window) },
                                budget: model.monthlyBudgetUSD,
-                               masked: model.maskAccounts)
+                               masked: model.maskAccounts,
+                               reconnect: ReconnectState(
+                                   perform: { model.reconnectClaudeAccount($0) },
+                                   inProgressKey: model.reconnectingClaudeKey,
+                                   busy: model.signingInClaude,
+                                   errorKey: model.reconnectErrorKey,
+                                   errorText: model.claudeSignInError))
             }
 
             Divider()

@@ -201,11 +201,15 @@ public struct ProviderUsage: Codable, Sendable, Hashable, Identifiable {
     public var detail: String?
     public var lastUpdated: Date?
     public var sourcePath: String?
+    /// The account's session is dead (401 / invalid_grant) — the card offers a
+    /// Reconnect action to re-run OAuth for this account.
+    public var needsReconnect: Bool
 
     public init(id: String, kind: ProviderKind, displayName: String, accountLabel: String? = nil,
                 planType: String? = nil, windows: [UsageWindow] = [], tokens: TokenStats? = nil,
                 credits: CreditInfo? = nil, cost: CostSummary? = nil, isThrottled: Bool = false,
-                status: UsageStatus, detail: String? = nil, lastUpdated: Date? = nil, sourcePath: String? = nil) {
+                status: UsageStatus, detail: String? = nil, lastUpdated: Date? = nil,
+                sourcePath: String? = nil, needsReconnect: Bool = false) {
         self.id = id
         self.kind = kind
         self.displayName = displayName
@@ -220,6 +224,7 @@ public struct ProviderUsage: Codable, Sendable, Hashable, Identifiable {
         self.detail = detail
         self.lastUpdated = lastUpdated
         self.sourcePath = sourcePath
+        self.needsReconnect = needsReconnect
     }
 
     /// The window we care most about for the compact menu-bar title: the one
