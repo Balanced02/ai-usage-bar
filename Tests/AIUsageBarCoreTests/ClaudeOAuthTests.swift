@@ -44,6 +44,25 @@ final class ClaudeOAuthTests: XCTestCase {
         XCTAssertTrue((v("scope") ?? "").contains("user:profile"))
     }
 
+    func testAuthorizeURLEncodesPlusInLoginHint() {
+        let pkce = ClaudeOAuth.makePKCE()
+        let url = ClaudeOAuth.authorizeURL(redirectURI: "http://localhost:1/callback",
+                                           pkce: pkce, loginHint: "you+tag@example.com")
+        let s = url.absoluteString
+        XCTAssertTrue(s.contains("login_hint=you%2Btag"))   // '+' percent-encoded
+        XCTAssertFalse(s.contains("you+tag"))               // never literal '+'
+        // The rest of the query is still intact.
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.first { $0.name == "login_hint" }?.value, "you+tag@example.com")  // decodes back
+        XCTAssertEqual(items.first { $0.name == "client_id" }?.value, ClaudeOAuth.clientID)
+    }
+
+    func testAuthorizeURLOmitsEmptyLoginHint() {
+        let url = ClaudeOAuth.authorizeURL(redirectURI: "http://localhost:1/callback",
+                                           pkce: ClaudeOAuth.makePKCE(), loginHint: "")
+        XCTAssertFalse(url.absoluteString.contains("login_hint"))
+    }
+
     func testSplitCodeState() {
         XCTAssertEqual(ClaudeOAuth.splitCodeState("abc#xyz").code, "abc")
         XCTAssertEqual(ClaudeOAuth.splitCodeState("abc#xyz").state, "xyz")

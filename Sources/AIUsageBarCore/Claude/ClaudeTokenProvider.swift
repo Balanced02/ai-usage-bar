@@ -15,11 +15,15 @@ public actor ClaudeTokenProvider {
     /// Per-account usage response cache (TTL-bounded) so re-rendering after a config
     /// change (rename, cost folder) doesn't re-hit the rate-limited usage endpoint.
     private var usageCache: [String: (usage: ClaudeUsage, at: Date)] = [:]
+    /// Accounts whose refresh returned `invalid_grant` — a genuinely dead session that
+    /// should prompt reconnect. A transient token-endpoint outage is NOT in here, so a
+    /// 401 during such an outage isn't misreported as "session expired".
+    private var deadSessions: Set<String> = []
 
-    /// Usage for an account, served from cache within `ttl` seconds. On a **transient**
-    /// error (rate-limit / network blip) the last good usage is served up to `staleTTL`
-    /// so the % bars don't vanish; `unauthorized` is terminal and always propagates so
-    /// the card can prompt to reconnect.
+    /// Usage for an account, served from cache within `ttl` seconds. Only a
+    /// **confirmed-dead** session (invalid_grant seen on refresh) surfaces `unauthorized`
+    /// (→ reconnect); a 401 during a transient token-endpoint blip serves last-good
+    /// usage or is reported as temporarily unavailable, never as "session expired".
     public func cachedUsage(key: String, accessToken: String, api: ClaudeUsageAPI,
                             ttl: TimeInterval = 180, staleTTL: TimeInterval = 1800,
                             now: Date = Date()) async throws -> ClaudeUsage {
@@ -28,10 +32,15 @@ public actor ClaudeTokenProvider {
             let usage = try await api.fetch(accessToken: accessToken)
             usageCache[key] = (usage, now)
             return usage
-        } catch ClaudeAPIError.unauthorized {
-            throw ClaudeAPIError.unauthorized                       // terminal — never mask
+        } catch ClaudeAPIError.unauthorized where deadSessions.contains(key) {
+            throw ClaudeAPIError.unauthorized                       // confirmed dead → reconnect
         } catch {
             if let hit = usageCache[key], now.timeIntervalSince(hit.at) < staleTTL { return hit.usage }
+            // A 401 we can't confirm is terminal (e.g. token-endpoint outage prevented a
+            // refresh) is transient — don't cry "reconnect".
+            if case ClaudeAPIError.unauthorized = error {
+                throw ClaudeAPIError.transport("temporarily unavailable")
+            }
             throw error
         }
     }
@@ -42,13 +51,14 @@ public actor ClaudeTokenProvider {
     /// Runs the full PKCE loopback flow and stores the token. `openURL` opens the
     /// browser (injected so Core stays UI-free). Throws `.stateMismatch`,
     /// `.cancelled`, or a transport/HTTP error.
-    public static func signIn(openURL: @Sendable @escaping (URL) -> Void) async throws -> ClaudeOAuthToken {
+    public static func signIn(loginHint: String? = nil,
+                              openURL: @Sendable @escaping (URL) -> Void) async throws -> ClaudeOAuthToken {
         let pkce = ClaudeOAuth.makePKCE()
         let loopback = try ClaudeOAuthLoopback()
         defer { loopback.stop() }
 
         let redirect = loopback.redirectURI
-        openURL(ClaudeOAuth.authorizeURL(redirectURI: redirect, pkce: pkce))
+        openURL(ClaudeOAuth.authorizeURL(redirectURI: redirect, pkce: pkce, loginHint: loginHint))
         let cb = try await loopback.waitForCallback()
         // A genuine loopback callback always echoes the state we sent, so require it
         // present AND matching — an absent state means a forged/injected callback.
@@ -79,14 +89,20 @@ public actor ClaudeTokenProvider {
         var out: [ClaudeOAuthToken] = []
         for stored in ClaudeTokenStore.all() {
             let key = ClaudeTokenStore.accountKey(for: stored)
-            if let cached = cache[key], !cached.isExpired() { out.append(cached); continue }
+            if let cached = cache[key], !cached.isExpired() {
+                deadSessions.remove(key); out.append(cached); continue
+            }
             guard stored.isExpired(), stored.refreshToken != nil else {
-                cache[key] = stored; out.append(stored); continue
+                deadSessions.remove(key); cache[key] = stored; out.append(stored); continue
             }
             do {
                 out.append(try await refreshShared(key: key, stored: stored))
+                deadSessions.remove(key)                     // refresh worked → healthy
+            } catch ClaudeOAuthError.invalidGrant {
+                deadSessions.insert(key)                     // refresh token dead → reconnect
+                out.append(stored)
             } catch {
-                out.append(stored)   // transient or terminal — let the reader decide
+                out.append(stored)                           // transient — leave state as-is
             }
         }
         return out
@@ -125,13 +141,16 @@ public actor ClaudeTokenProvider {
     public nonisolated func accounts() -> [ClaudeOAuthToken] { ClaudeTokenStore.all() }
 
     public func store(_ token: ClaudeOAuthToken) {
+        let key = ClaudeTokenStore.accountKey(for: token)
         ClaudeTokenStore.save(token)
-        cache[ClaudeTokenStore.accountKey(for: token)] = token
+        cache[key] = token
+        deadSessions.remove(key)          // fresh token → session healthy again
     }
 
     public func signOut(account: String) {
         ClaudeTokenStore.delete(account: account)
         cache[account] = nil
         usageCache[account] = nil
+        deadSessions.remove(account)
     }
 }

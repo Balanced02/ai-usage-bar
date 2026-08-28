@@ -105,7 +105,9 @@ public struct ClaudeReader: Sendable {
             let hint = retry.map { " (retry \(Int($0))s)" } ?? ""
             return fallback("Rate limited\(hint)")
         } catch ClaudeAPIError.unauthorized {
-            return fallback("Session expired — reconnect this account")
+            var card = fallback("Session expired — reconnect this account")
+            card.needsReconnect = true
+            return card
         } catch {
             return fallback("Endpoint unavailable")
         }

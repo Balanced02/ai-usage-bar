@@ -95,6 +95,11 @@ public final class AppModel {
     public private(set) var claudeAccounts: [ClaudeAccountSummary]
     /// True while an interactive sign-in is in flight (browser open, awaiting code).
     public private(set) var signingInClaude = false
+    /// Account key currently being reconnected (for a per-card spinner; nil for a
+    /// plain "Add account").
+    public private(set) var reconnectingClaudeKey: String?
+    /// Account key whose last reconnect failed, so the menu card can show the error.
+    public private(set) var reconnectErrorKey: String?
     /// Last sign-in failure, for the Settings UI (nil when none / user cancelled).
     public var claudeSignInError: String?
     private var providerSettings: ProviderSettings
@@ -398,27 +403,43 @@ public final class AppModel {
     /// Sign into a Claude account via our own OAuth. Opens the browser, captures the
     /// code on a loopback listener, mints a token, and stores it in our own Keychain
     /// item — so this never prompts for access to Claude Code's Keychain entry.
-    public func addClaudeAccount() {
+    public func addClaudeAccount(loginHint: String? = nil) {
         guard !signingInClaude else { return }
         signingInClaude = true
         claudeSignInError = nil
+        let reconnectKey = reconnectingClaudeKey   // scope the outcome to the reconnected card
         Task {
             do {
-                _ = try await ClaudeTokenProvider.signIn(openURL: { url in
+                _ = try await ClaudeTokenProvider.signIn(loginHint: loginHint, openURL: { url in
                     Task { @MainActor in NSWorkspace.shared.open(url) }
                 })
                 signingInClaude = false
+                reconnectingClaudeKey = nil
+                reconnectErrorKey = nil
                 lastClaude = []
                 reloadClaudeAccounts()
                 reconfigure()
                 await refresh()
             } catch ClaudeOAuthError.cancelled {
                 signingInClaude = false            // user closed the browser — silent
+                reconnectingClaudeKey = nil
             } catch {
                 signingInClaude = false
+                reconnectingClaudeKey = nil
                 claudeSignInError = Self.describeSignInError(error)
+                reconnectErrorKey = reconnectKey   // nil for a plain Add; the card key for a reconnect
             }
         }
+    }
+
+    /// Re-run OAuth for an account whose session expired. Pre-fills the email so the
+    /// browser targets the same account — signing in mints a fresh token that replaces
+    /// the dead one in place (same UUID), keeping the account's name + cost config.
+    public func reconnectClaudeAccount(_ key: String) {
+        guard !signingInClaude else { return }
+        reconnectingClaudeKey = key
+        reconnectErrorKey = nil
+        addClaudeAccount(loginHint: claudeAccounts.first { $0.key == key }?.email)
     }
 
     /// Remove a signed-in account (deletes its stored token + config) and its card.

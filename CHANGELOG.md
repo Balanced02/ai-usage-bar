@@ -11,6 +11,14 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-04
+
+### Added
+- **Reconnect button.** When a Claude account's session expires, its card now shows a **Reconnect
+  account** button that re-runs sign-in pre-filled with that account's email (so your browser targets
+  the right account) and replaces the dead token in place — keeping the account's name and cost-logs
+  settings. Previously there was no way to recover an expired account from the UI.
+
 ## [0.3.1] - 2026-08-04
 
 ### Added
