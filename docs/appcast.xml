@@ -11,6 +11,19 @@
     <!-- Newest release first. Fill edSignature + length from the Release
          workflow's "Sign update for Sparkle" step output. -->
     <item>
+      <title>0.3.2</title>
+      <pubDate>Fri, 28 Aug 2026 10:58:00 +0000</pubDate>
+      <sparkle:version>0.3.2</sparkle:version>
+      <sparkle:shortVersionString>0.3.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[A Claude account whose session expires now shows a Reconnect button on its card — one click re-signs-in that account and keeps its name and cost settings.]]></description>
+      <enclosure
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.3.2/AIUsageBar-v0.3.2.zip"
+        sparkle:edSignature="RLTTO85pB0FvATz4pBUAuRrOEcE5I3ggTGvWn/6SZVSqSx4yVMfP1sx48tsE0b39m8q7DeL0IX5H84a1RtlzBQ=="
+        length="2147061"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>0.3.1</title>
       <pubDate>Tue, 04 Aug 2026 13:57:00 +0000</pubDate>
       <sparkle:version>0.3.1</sparkle:version>
