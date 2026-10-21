@@ -11,6 +11,19 @@
     <!-- Newest release first. Fill edSignature + length from the Release
          workflow's "Sign update for Sparkle" step output. -->
     <item>
+      <title>0.4.0</title>
+      <pubDate>Wed, 21 Oct 2026 15:48:26 +0000</pubDate>
+      <sparkle:version>0.4.0</sparkle:version>
+      <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[Grok now has its own tab: recorded session cost, plus a weekly or monthly plan-limit bar and its reset time.]]></description>
+      <enclosure
+        url="https://github.com/Balanced02/ai-usage-bar/releases/download/v0.4.0/AIUsageBar-v0.4.0.zip"
+        sparkle:edSignature="pK+9+L3DGJqZowyZkXnOpN7wxaWjA0gWoP5TxcC9mDSUFCsq/6Nu2oRn2hanVHGf1cVX9ezpE0geR8Nlwp82Ag=="
+        length="2208739"
+        type="application/octet-stream" />
+    </item>
+    <item>
       <title>0.3.2</title>
       <pubDate>Fri, 28 Aug 2026 10:58:00 +0000</pubDate>
       <sparkle:version>0.3.2</sparkle:version>
