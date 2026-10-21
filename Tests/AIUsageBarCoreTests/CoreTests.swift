@@ -253,7 +253,7 @@ final class CoreTests: XCTestCase {
             to: gemini.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
 
         let config = UsageConfig(codexEnabled: true, claudeEnabled: false, geminiEnabled: true,
-                                 codexHome: codex, geminiHome: gemini)
+                                 grokEnabled: false, codexHome: codex, geminiHome: gemini)
         let service = UsageService(config: config)
         let local = await service.readLocal()
         let refreshed = await service.refresh()
@@ -304,6 +304,132 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(missing.status, .notInstalled)
 
         try? fm.removeItem(at: dir)
+    }
+
+    func testGrokReaderAggregatesSessionLedgers() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("grok-\(UUID().uuidString)")
+        let cal = Calendar.current
+        let now = try XCTUnwrap(cal.date(from: DateComponents(year: 2026, month: 7, day: 13, hour: 15)))
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        func at(_ delta: TimeInterval) -> String { iso.string(from: now.addingTimeInterval(delta)) }
+
+        // Grok stores the cwd as one percent-encoded directory name (`%2Fsrc%2Fwidget`).
+        // Create those names as literal path bytes so URL percent-encoding cannot
+        // turn `%` into `%25` on the way in.
+        func session(_ cwd: String, _ id: String) -> URL {
+            URL(fileURLWithPath: root.path + "/sessions/" + cwd + "/" + id, isDirectory: true)
+        }
+        let keeper = session("%2Fsrc%2Fwidget", "11111111-1111-1111-1111-111111111111")
+        let duplicate = session("%2Fsrc%2Fother", "11111111-1111-1111-1111-111111111111")
+        let notes = session("%2Fsrc%2Fnotes", "22222222-2222-2222-2222-222222222222")
+        try fm.createDirectory(at: keeper, withIntermediateDirectories: true)
+        try fm.createDirectory(at: duplicate, withIntermediateDirectories: true)
+        try fm.createDirectory(at: notes, withIntermediateDirectories: true)
+
+        // 5h ($1), within 7d ($2), within 30d ($0.50), and a June turn that must drop out.
+        // Session totals are intentionally tiny so a reader that ignores turns fails.
+        let keeperJSON = """
+        {"sessionId":"11111111-1111-1111-1111-111111111111","updatedAt":"\(at(0))",
+         "session":{"inputTokens":1,"outputTokens":0,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0,"totalTokens":1,"costUsdTicks":1},
+         "turns":[
+           {"endedAt":"\(at(-3600))","inputTokens":100,"outputTokens":600,"cachedReadTokens":300,"cacheCreationTokens":0,"reasoningTokens":20,"totalTokens":1000,"costUsdTicks":10000000000,"modelUsage":{"grok-4":{"inputTokens":100,"outputTokens":600,"cachedReadTokens":300,"cacheCreationTokens":0,"reasoningTokens":20,"totalTokens":1000,"costUsdTicks":10000000000}}},
+           {"endedAt":"\(at(-3 * 24 * 3600))","inputTokens":0,"outputTokens":2000,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0,"totalTokens":2000,"costUsdTicks":20000000000,"modelUsage":{"grok-4":{"inputTokens":0,"outputTokens":2000,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0,"totalTokens":2000,"costUsdTicks":20000000000}}},
+           {"endedAt":"\(at(-12 * 24 * 3600))","inputTokens":0,"outputTokens":4000,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0,"totalTokens":4000,"costUsdTicks":5000000000,"modelUsage":{"grok-4":{"inputTokens":0,"outputTokens":4000,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0,"totalTokens":4000,"costUsdTicks":5000000000}}},
+           {"endedAt":"\(at(-50 * 24 * 3600))","inputTokens":0,"outputTokens":9000000,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0,"totalTokens":9000000,"costUsdTicks":900000000000,"modelUsage":{"grok-4":{"inputTokens":0,"outputTokens":9000000,"cachedReadTokens":0,"cacheCreationTokens":0,"reasoningTokens":0,"totalTokens":9000000,"costUsdTicks":900000000000}}}
+         ]}
+        """
+        // Same session id, older update, huge turn — must be ignored.
+        let duplicateJSON = """
+        {"sessionId":"11111111-1111-1111-1111-111111111111","updatedAt":"\(at(-24 * 3600))",
+         "session":{"totalTokens":500000,"costUsdTicks":500000000000},"turns":[
+           {"endedAt":"\(at(-1800))","totalTokens":500000,"costUsdTicks":500000000000}
+         ]}
+        """
+        // No dated turns: the session total is taken at updatedAt.
+        let notesJSON = """
+        {"sessionId":"22222222-2222-2222-2222-222222222222","updatedAt":"\(at(-60))",
+         "session":{"inputTokens":0,"outputTokens":50,"totalTokens":50,"costUsdTicks":0},"turns":[]}
+        """
+        try keeperJSON.write(to: keeper.appendingPathComponent("usage.json"), atomically: true, encoding: .utf8)
+        try duplicateJSON.write(to: duplicate.appendingPathComponent("usage.json"), atomically: true, encoding: .utf8)
+        try notesJSON.write(to: notes.appendingPathComponent("usage.json"), atomically: true, encoding: .utf8)
+
+        let usage = GrokReader(grokHome: root).read(now: now)
+        XCTAssertEqual(usage.kind, .grok)
+        XCTAssertEqual(usage.status, .ok)
+        XCTAssertTrue(usage.windows.isEmpty)
+        let cost = try XCTUnwrap(usage.cost)
+        XCTAssertEqual(cost.last5hTokens, 1050)
+        XCTAssertEqual(cost.last5hUSD, 1, accuracy: 0.001)
+        XCTAssertEqual(cost.last7dTokens, 3050)
+        XCTAssertEqual(cost.last7dUSD, 3, accuracy: 0.001)
+        XCTAssertEqual(cost.totalTokens, 7050)
+        XCTAssertEqual(cost.monthUSD, 3.5, accuracy: 0.001)
+        XCTAssertEqual(cost.todayUSD, 1, accuracy: 0.001)
+        XCTAssertEqual(cost.byRepo.first?.repo, "widget")
+        XCTAssertEqual(cost.byModel.first?.model, "grok-4")
+        XCTAssertEqual(cost.byModel.first?.tokens, 7000)
+        XCTAssertEqual(cost.cacheHitRatio ?? -1, 0.75, accuracy: 0.001)
+        XCTAssertEqual(usage.tokens?.reasoningTokens, 20)
+        XCTAssertEqual(GrokReader.projectName(sessionDirectoryName: "%2Fsrc%2Fwidget"), "widget")
+
+        let missing = fm.temporaryDirectory.appendingPathComponent("grok-missing-\(UUID().uuidString)")
+        let absent = GrokReader(grokHome: missing).read(now: now)
+        XCTAssertEqual(absent.status, .notInstalled)
+        XCTAssertEqual(absent.detail, "No \(missing.appendingPathComponent("sessions").path) found")
+
+        try? fm.removeItem(at: root)
+    }
+
+    func testGrokReaderReadsPlanLimitFromBillingLog() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("grok-bill-\(UUID().uuidString)")
+        let logs = root.appendingPathComponent("logs", isDirectory: true)
+        try fm.createDirectory(at: logs, withIntermediateDirectories: true)
+
+        // Older check must lose to the newer one. A non-JSON mention of the
+        // marker, and a check with no percentage, must not produce a window.
+        let body = """
+        {"ts":"2026-07-06T12:00:00.000Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":90,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-06-29T12:00:00.000Z","end":"2026-07-06T12:00:00.000Z"}}}}
+        not json billing: fetched credits config
+        {"ts":"2026-07-13T11:00:00.000Z","msg":"billing: fetched credits config","ctx":{"config":{"historyLen":0}}}
+        {"ts":"2026-07-13T12:00:00.000Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":37.5,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-07-06T12:00:00.000Z","end":"2026-07-13T18:00:00.000Z"},"onDemandCap":50,"onDemandUsed":10,"prepaidBalance":{"val":0},"isUnifiedBillingUser":true,"historyLen":0}}}
+        """
+        try body.write(to: logs.appendingPathComponent("unified.jsonl"), atomically: true, encoding: .utf8)
+
+        let usage = GrokReader(grokHome: root).read()
+        XCTAssertEqual(usage.status, .ok)
+        XCTAssertFalse(usage.isThrottled)
+        XCTAssertEqual(usage.windows.count, 2)
+        let weekly = try XCTUnwrap(usage.windows.first)
+        XCTAssertEqual(weekly.kind, .weekly)
+        XCTAssertNil(weekly.name)
+        XCTAssertEqual(weekly.usedPercent ?? -1, 37.5, accuracy: 0.001)
+        // 2026-07-06 12:00Z → 2026-07-13 18:00Z is 7 days plus 6 hours.
+        XCTAssertEqual(weekly.windowMinutes, 7 * 24 * 60 + 6 * 60)
+        let reset = try XCTUnwrap(weekly.resetsAt)
+        XCTAssertEqual(reset.timeIntervalSince1970, ISODate.parse("2026-07-13T18:00:00.000Z")!.timeIntervalSince1970, accuracy: 1)
+        let extra = usage.windows[1]
+        XCTAssertEqual(extra.name, "On-demand")
+        XCTAssertEqual(extra.usedPercent ?? -1, 20, accuracy: 0.001)
+
+        // Monthly period, and a full bar counts as throttled. No session ledger required.
+        let monthly = """
+        {"ts":"2026-07-01T00:00:00.000Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":100,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_MONTHLY","start":"2026-07-01T00:00:00.000Z","end":"2026-08-01T00:00:00.000Z"}}}}
+        """
+        try monthly.write(to: logs.appendingPathComponent("unified.jsonl"), atomically: true, encoding: .utf8)
+        let monthUsage = GrokReader(grokHome: root).read()
+        XCTAssertEqual(monthUsage.windows.count, 1)
+        XCTAssertEqual(monthUsage.windows[0].kind, .monthly)
+        XCTAssertEqual(monthUsage.windows[0].usedPercent, 100)
+        XCTAssertTrue(monthUsage.isThrottled)
+        let monthMinutes = try XCTUnwrap(monthUsage.windows[0].windowMinutes)
+        XCTAssertGreaterThanOrEqual(monthMinutes, 40_000)
+        XCTAssertLessThanOrEqual(monthMinutes, 46_000)
+
+        try? fm.removeItem(at: root)
     }
 
     // Builds a token_count rollout line like the ones Codex writes.

@@ -16,19 +16,20 @@ Scripts/install-hooks.sh     # activate the pre-commit personal-data / secret gu
 ## Project layout
 
 - `Sources/AIUsageBarCore` — pure logic (readers, models, history, projection). No UI. Unit-tested.
-  - `CodexReader`, `Claude/*`, `GeminiReader` — one reader per provider.
+  - `CodexReader`, `Claude/*`, `GeminiReader`, `GrokReader` — one reader per provider.
   - `UsageService` — aggregates providers; `UsageHistory` — the on-disk timeseries.
 - `Sources/AIUsageBarUI` — SwiftUI views + `AppModel` (the observable state) + menu-bar rendering.
 - `Sources/AIUsageBar` — the `@main` app: `NSStatusItem` + `NSPopover` glue.
-- `Sources/usageprobe` — CLI to exercise the readers (`usageprobe codex|claude|gemini|all|profiles|statusline`).
+- `Sources/usageprobe` — CLI to exercise the readers (`usageprobe codex|claude|gemini|grok|all|profiles|statusline`).
 - `Sources/previewgen` — renders the UI to PNGs (used for the README screenshots).
 - `Sources/icongen` — renders the app icon.
 
 ## Adding a provider
 
 Today each provider is its own reader in `AIUsageBarCore` returning a `ProviderUsage`, wired into
-`UsageService`. A `UsageProvider` protocol + registry to make this a one-file change is on the roadmap —
-if you want to add Cursor / Copilot / Grok, open an issue first so we can land that refactor.
+`UsageService`. Grok is one of those readers: it sums local `usage.json` ledgers and reads the
+plan-limit bar from the CLI's billing log. It does not call the network. A `UsageProvider` protocol + registry to make this a one-file change is on the roadmap —
+if you want to add Cursor / Copilot, open an issue first so we can land that refactor.
 
 ## Guidelines
 

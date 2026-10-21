@@ -5,6 +5,7 @@ public enum ProviderKind: String, Codable, Sendable, CaseIterable {
     case claude
     case codex
     case gemini
+    case grok
     case custom   // user-configured providers (grouped under one "Custom" tab)
 }
 

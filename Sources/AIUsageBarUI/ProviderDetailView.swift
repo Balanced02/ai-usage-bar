@@ -134,8 +134,8 @@ struct AccountBlock: View {
             if usage.windows.isEmpty {
                 // No live limits (not connected) — show ccusage-style local usage
                 // from the logs so the account is still useful without the Keychain.
-                if let cost = usage.cost, cost.last7dTokens > 0 {
-                    LocalUsageRows(cost: cost, accent: accent)
+                if let cost = usage.cost, cost.totalTokens > 0 {
+                    LocalUsageRows(cost: cost, accent: accent, note: localNote)
                 } else {
                     emptyState
                 }
@@ -264,12 +264,25 @@ struct AccountBlock: View {
         }
     }
 
+    /// Claude without a live connection still has log-derived rows and a prompt
+    /// to sign in. Grok falls back to these rows only when the CLI has not logged
+    /// a plan limit yet.
+    private var localNote: String {
+        if usage.kind == .grok {
+            return "Recorded from local Grok sessions. The plan limit shows up after Grok checks billing."
+        }
+        return "Local activity from your logs — Connect for the live limit %."
+    }
+
     private var footnote: String? {
         var parts: [String] = []
         if let c = usage.credits, let b = c.balance, b != "0" { parts.append("Credits: \(b)") }
         // Codex token total; Claude tokens are shown in the cost section instead.
         if usage.kind == .codex, let t = Theme.compactTokens(usage.tokens?.totalTokens) {
             parts.append("\(t) session tokens")
+        }
+        if usage.kind == .grok, !usage.windows.isEmpty {
+            parts.append("Plan limit from Grok's last billing check")
         }
         return parts.isEmpty ? nil : parts.joined(separator: "   ")
     }
@@ -283,12 +296,13 @@ struct AccountBlock: View {
 struct LocalUsageRows: View {
     let cost: CostSummary
     let accent: Color
+    var note: String = "Local activity from your logs — Connect for the live limit %."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             usageRow("5H", tokens: cost.last5hTokens, usd: cost.last5hUSD)
             usageRow("7D", tokens: cost.last7dTokens, usd: cost.last7dUSD)
-            Text("Local activity from your logs — Connect for the live limit %.")
+            Text(note)
                 .font(.caption2).foregroundStyle(.tertiary)
         }
     }

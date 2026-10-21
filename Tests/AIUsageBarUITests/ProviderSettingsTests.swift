@@ -56,6 +56,8 @@ final class ProviderSettingsTests: XCTestCase {
 
         XCTAssertEqual(config.codexHome?.path, "/tmp/codex")
         XCTAssertEqual(config.geminiHome?.path, "/tmp/gemini")
+        XCTAssertTrue(config.grokEnabled)
+        XCTAssertNil(config.grokHome)
         XCTAssertEqual(config.claudeAccountConfigs["acc-1"]?.name, "Work")
         XCTAssertEqual(config.claudeAccountConfigs["acc-1"]?.logsDir, "/tmp/.claude")
     }
@@ -87,6 +89,7 @@ final class ProviderSettingsTests: XCTestCase {
         draft.codexEnabled = false
         draft.claudeEnabled = false
         draft.geminiEnabled = false
+        draft.grokEnabled = false
         draft.monthlyBudgetUSD = 250
         draft.maskAccounts = true
         draft.providerSettings = ProviderSettings(codexHome: URL(fileURLWithPath: "/tmp/codex"))
@@ -98,6 +101,7 @@ final class ProviderSettingsTests: XCTestCase {
         XCTAssertFalse(model.codexEnabled)
         XCTAssertFalse(model.claudeEnabled)
         XCTAssertFalse(model.geminiEnabled)
+        XCTAssertFalse(model.grokEnabled)
         XCTAssertEqual(model.monthlyBudgetUSD, 250)
         XCTAssertTrue(model.maskAccounts)
         XCTAssertEqual(defaults.double(forKey: "monthlyBudgetUSD"), 250)

@@ -98,6 +98,7 @@ public struct SettingsView: View {
             Toggle("Codex", isOn: $draft.codexEnabled)
             Toggle("Claude", isOn: $draft.claudeEnabled)
             Toggle("Gemini", isOn: $draft.geminiEnabled)
+            Toggle("Grok", isOn: $draft.grokEnabled)
         }
     }
 
@@ -115,6 +116,13 @@ public struct SettingsView: View {
                 url: draft.providerSettings.geminiHome,
                 choose: chooseGeminiFolder,
                 reset: { draft.providerSettings.geminiHome = nil }
+            )
+
+            dataRootRow(
+                label: "Grok data folder",
+                url: draft.providerSettings.grokHome,
+                choose: chooseGrokFolder,
+                reset: { draft.providerSettings.grokHome = nil }
             )
         }
     }
@@ -213,6 +221,12 @@ public struct SettingsView: View {
     private func chooseGeminiFolder() {
         chooseFolder(title: "Choose Gemini data folder") { url in
             draft.providerSettings.geminiHome = url
+        }
+    }
+
+    private func chooseGrokFolder() {
+        chooseFolder(title: "Choose Grok data folder") { url in
+            draft.providerSettings.grokHome = url
         }
     }
 

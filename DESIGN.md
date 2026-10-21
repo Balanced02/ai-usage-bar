@@ -115,6 +115,20 @@ No Codex-style quota file exists. State machine:
 - Ignore `~/Library/.../com.google.GeminiMacOS*` — that's the unrelated desktop app.
 - Stretch: PTY-drive `gemini` → `/stats` and scrape "Usage left %". Brittle; not v1.
 
+### Grok — local ledgers + the CLI's billing log  (✅ limit %)
+
+The configuration root can be selected in Settings and defaults to `~/.grok`.
+
+- **Cost and tokens** come from `sessions/<percent-encoded-cwd>/<id>/usage.json` (what `grok usage`
+  prints). Sum turns by `endedAt`. `costUsdTicks` is the server's own cost (10^10 ticks per USD).
+  The project label is only the cwd's last path component — never the full path.
+- **Plan limit** is a real percentage plus a reset, but it is not in the ledger. While the CLI is
+  running it logs `billing: fetched credits config` to `logs/unified.jsonl`. `creditUsagePercent`
+  is 0–100 and `currentPeriod.end` is the reset. The period type is weekly or monthly. An on-demand
+  cap (`onDemandUsed / onDemandCap`) is a second bar when both numbers are present.
+- Do not read `auth.json` and do not call Grok's billing endpoint. The bar is as fresh as the
+  CLI's own check.
+
 ## Architecture
 
 ```
@@ -128,6 +142,7 @@ AIUsageBarCore (library, pure Foundation + Security)
     ClaudeUsageAPI.swift  GET /api/oauth/usage (headers, decode, cache)
     ClaudeReader.swift    per-profile identity + usage + fallbacks
   GeminiReader.swift      detection state machine
+  GrokReader.swift        session ledgers + billing-log limit bar
   UsageService.swift      aggregate all providers, cache, refresh
 
 AIUsageBar (executable, AppKit entry point)

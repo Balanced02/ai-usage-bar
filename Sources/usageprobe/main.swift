@@ -4,6 +4,7 @@ import AIUsageBarCore
 // A tiny CLI to validate the readers against real local data.
 //   usageprobe codex    (default) — Codex only, no network/Keychain
 //   usageprobe gemini              — Gemini detection
+//   usageprobe grok                — Grok session ledgers + plan limit from the CLI billing log
 //   usageprobe claude              — Claude (reads Keychain + calls endpoint)
 //   usageprobe all                 — everything
 
@@ -19,6 +20,10 @@ func fmt(_ p: ProviderUsage) -> String {
     }
     if let c = p.credits, let b = c.balance { lines.append("    credits: \(b)") }
     if let t = p.tokens?.totalTokens { lines.append("    tokens: \(t)") }
+    if let c = p.cost {
+        lines.append(String(format: "    cost: today $%.2f  7d $%.2f  30d $%.2f",
+                            c.todayUSD, c.last7dUSD, c.monthUSD))
+    }
     if p.isThrottled { lines.append("    ⚠︎ throttled") }
     if let d = p.detail { lines.append("    note: \(d)") }
     if let path = p.sourcePath { lines.append("    src: \(path)") }
@@ -39,6 +44,8 @@ case "codex":
     print(fmt(CodexReader().read()))
 case "gemini":
     print(fmt(GeminiReader().read()))
+case "grok":
+    print(fmt(GrokReader().read()))
 case "claude":
     // The CLI can't do OAuth (its code signature differs from the app's, so it can't
     // read the app's Keychain token), so it shows local cost per discovered config
@@ -62,13 +69,18 @@ case "statusline":
     // One compact line for a shell prompt / Claude Code statusLine.
     let results = await UsageService(config: UsageConfig()).refresh()
     var parts: [String] = []
-    for kind in [ProviderKind.codex, .claude, .gemini] {
-        let pct = results.filter { $0.kind == kind }.compactMap { $0.maxUsedPercent }.max()
-        guard let p = pct else { continue }
-        let code = kind == .codex ? "Cx" : (kind == .claude ? "Cl" : "Gm")
-        parts.append("\(code) \(Int(p.rounded()))%")
+    for kind in [ProviderKind.codex, .claude, .gemini, .grok] {
+        let cards = results.filter { $0.kind == kind }
+        if let p = cards.compactMap({ $0.maxUsedPercent }).max() {
+            let code = kind == .codex ? "Cx" : (kind == .claude ? "Cl" : (kind == .gemini ? "Gm" : "Gk"))
+            parts.append("\(code) \(Int(p.rounded()))%")
+            continue
+        }
+        if kind == .grok, let today = cards.compactMap(\.cost).map(\.todayUSD).max(), today > 0 {
+            parts.append(String(format: "Gk $%.2f", today))
+        }
     }
     print(parts.isEmpty ? "AI usage: n/a" : parts.joined(separator: " · "))
 default:
-    print("usage: usageprobe [codex|claude|gemini|all]")
+    print("usage: usageprobe [codex|claude|gemini|grok|all]")
 }

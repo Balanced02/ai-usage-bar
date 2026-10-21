@@ -40,7 +40,10 @@ public struct CostSection: View {
                 if !cost.byModel.isEmpty { modelMix }
                 if !cost.byRepo.isEmpty { repos }
                 if let hit = cost.cacheHitRatio {
-                    Text("Cache \(Int((hit * 100).rounded()))% hit · saved \(Theme.usd(cost.cacheSavedUSD))")
+                    let pct = "Cache \(Int((hit * 100).rounded()))% hit"
+                    Text(cost.cacheSavedUSD > 0.005
+                         ? "\(pct) · saved \(Theme.usd(cost.cacheSavedUSD))"
+                         : pct)
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 forecast
