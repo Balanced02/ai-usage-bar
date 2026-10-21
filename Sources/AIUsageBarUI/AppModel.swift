@@ -10,11 +10,15 @@ public struct LabelChip: Identifiable, Sendable {
     public var code: String
     public var percent: Double?
     public var throttled: Bool
+    /// Shown in place of a percentage when the provider has no quota window
+    /// (Grok's recorded cost, for example).
+    public var valueText: String?
 
-    public init(code: String, percent: Double?, throttled: Bool) {
+    public init(code: String, percent: Double?, throttled: Bool, valueText: String? = nil) {
         self.code = code
         self.percent = percent
         self.throttled = throttled
+        self.valueText = valueText
     }
 }
 
@@ -52,6 +56,7 @@ public struct SettingsDraft: Equatable {
     public var codexEnabled: Bool
     public var claudeEnabled: Bool
     public var geminiEnabled: Bool
+    public var grokEnabled: Bool
     public var notificationsEnabled: Bool
     public var menuBarStyle: MenuBarStyle
     public var monthlyBudgetUSD: Double
@@ -68,7 +73,7 @@ public final class AppModel {
     public private(set) var isRefreshing = false
     public private(set) var labelImage: NSImage?
 
-    /// Which provider tab (Claude / Codex / Gemini) is shown in the detail panel.
+    /// Which provider tab (Claude / Codex / Gemini / Grok) is shown in the detail panel.
     public var selectedKind: ProviderKind?
 
     private var lastClaude: [ProviderUsage] = []
@@ -83,6 +88,7 @@ public final class AppModel {
     public var codexEnabled: Bool { didSet { settingChanged(rebuildConfig: true) } }
     public var claudeEnabled: Bool { didSet { settingChanged(rebuildConfig: true) } }
     public var geminiEnabled: Bool { didSet { settingChanged(rebuildConfig: true) } }
+    public var grokEnabled: Bool { didSet { settingChanged(rebuildConfig: true) } }
     public var notificationsEnabled: Bool { didSet { settingChanged(); notifier.enabled = notificationsEnabled } }
     public var menuBarStyle: MenuBarStyle { didSet { settingChanged(); updateLabel() } }
     /// Optional monthly $ budget for the cost gauge (0 = off).
@@ -119,6 +125,7 @@ public final class AppModel {
         let codexEnabled = defaults.object(forKey: "codexEnabled") as? Bool ?? true
         let claudeEnabled = defaults.object(forKey: "claudeEnabled") as? Bool ?? true
         let geminiEnabled = defaults.object(forKey: "geminiEnabled") as? Bool ?? true
+        let grokEnabled = defaults.object(forKey: "grokEnabled") as? Bool ?? true
         let notificationsEnabled = defaults.object(forKey: "notificationsEnabled") as? Bool ?? true
         let menuBarStyle = MenuBarStyle(rawValue: defaults.string(forKey: "menuBarStyle") ?? "") ?? .text
         let monthlyBudgetUSD = defaults.object(forKey: "monthlyBudgetUSD") as? Double ?? 0
@@ -128,7 +135,8 @@ public final class AppModel {
             providerSettings: providerSettings,
             codexEnabled: codexEnabled,
             claudeEnabled: claudeEnabled,
-            geminiEnabled: geminiEnabled
+            geminiEnabled: geminiEnabled,
+            grokEnabled: grokEnabled
         )
 
         self.defaults = defaults
@@ -136,6 +144,7 @@ public final class AppModel {
         self.codexEnabled = codexEnabled
         self.claudeEnabled = claudeEnabled
         self.geminiEnabled = geminiEnabled
+        self.grokEnabled = grokEnabled
         self.notificationsEnabled = notificationsEnabled
         self.menuBarStyle = menuBarStyle
         self.monthlyBudgetUSD = monthlyBudgetUSD
@@ -166,7 +175,7 @@ public final class AppModel {
     public func refresh() async {
         isRefreshing = true
 
-        // 1. Publish fast local providers (Codex + Gemini) immediately, with
+        // 1. Publish fast local providers (Codex, Gemini, Grok) immediately, with
         //    identity-only Claude placeholders so the panel is never blank.
         let local = await service.readLocal()
         if !claudeEnabled {
@@ -194,13 +203,14 @@ public final class AppModel {
         return history.series(forKey: key, since: Date().addingTimeInterval(-24 * 3600))
     }
 
-    /// Rebuilds the ordered provider list (Codex → Claude profiles → Gemini),
+    /// Rebuilds the ordered provider list (Codex → Claude profiles → Gemini → Grok),
     /// the menu-bar label, and keeps a valid tab selected.
-    private func rebuild(local: (codex: ProviderUsage?, gemini: ProviderUsage?, customs: [ProviderUsage])) {
+    private func rebuild(local: (codex: ProviderUsage?, gemini: ProviderUsage?, grok: ProviderUsage?, customs: [ProviderUsage])) {
         var arr: [ProviderUsage] = []
         if let c = local.codex { arr.append(c) }
         if claudeEnabled { arr.append(contentsOf: lastClaude) }
         if let g = local.gemini { arr.append(g) }
+        if let k = local.grok { arr.append(k) }
         arr.append(contentsOf: local.customs)
         providers = arr
         updateLabel()
@@ -247,14 +257,33 @@ public final class AppModel {
     /// One dual-bar meter item per provider kind (worst 5h / weekly across accounts).
     public func meterItems() -> [MenuBarMeterItem] {
         var items: [MenuBarMeterItem] = []
-        for kind in [ProviderKind.codex, .claude, .gemini, .custom] {
+        for kind in [ProviderKind.codex, .claude, .gemini, .grok, .custom] {
             let cards = providers.filter { $0.kind == kind }
             guard !cards.isEmpty else { continue }
             let allWindows = cards.flatMap { $0.windows }
-            let five = allWindows.filter { $0.kind == .fiveHour }.compactMap { $0.usedPercent }.max()
-            let week = allWindows.filter { $0.kind == .weekly && $0.name == nil }.compactMap { $0.usedPercent }.max()
-            if five == nil && week == nil { continue }
-            items.append(MenuBarMeterItem(code: Theme.shortCode(for: kind), fiveHour: five, weekly: week))
+            // Classic pair is the unnamed 5h and weekly bars (Codex / Claude).
+            // A provider with a different window — Grok's weekly-or-monthly plan
+            // limit, or a custom daily cap — still gets a bar.
+            let fiveHour = allWindows.filter { $0.kind == .fiveHour }.compactMap(\.usedPercent).max()
+            let weekly = allWindows.filter { $0.kind == .weekly && $0.name == nil }.compactMap(\.usedPercent).max()
+            let other = allWindows
+                .filter { $0.kind != .fiveHour && !($0.kind == .weekly && $0.name == nil) }
+                .compactMap(\.usedPercent).max()
+            var top = fiveHour
+            var bottom = weekly
+            if top == nil && bottom == nil {
+                bottom = other
+            } else if top == nil {
+                top = other
+            }
+            if top == nil && bottom == nil {
+                if let text = menuText(for: kind, cards: cards) {
+                    items.append(MenuBarMeterItem(code: Theme.shortCode(for: kind),
+                                                  fiveHour: nil, weekly: nil, caption: text))
+                }
+                continue
+            }
+            items.append(MenuBarMeterItem(code: Theme.shortCode(for: kind), fiveHour: top, weekly: bottom))
         }
         return items
     }
@@ -262,7 +291,7 @@ public final class AppModel {
     /// Provider kinds present, in a stable tab order.
     public var kinds: [ProviderKind] {
         let present = Set(providers.map(\.kind))
-        return [.claude, .codex, .gemini, .custom].filter(present.contains)
+        return [.claude, .codex, .gemini, .grok, .custom].filter(present.contains)
     }
 
     /// All account cards for a kind (e.g. both Claude profiles), in order.
@@ -307,17 +336,35 @@ public final class AppModel {
     /// One chip per provider kind, using the worst window across that kind's cards.
     public func labelChips() -> [LabelChip] {
         var chips: [LabelChip] = []
-        for kind in [ProviderKind.codex, .claude, .gemini, .custom] {
+        for kind in [ProviderKind.codex, .claude, .gemini, .grok, .custom] {
             let cards = providers.filter { $0.kind == kind }
             guard !cards.isEmpty else { continue }
             let pct = cards.compactMap { $0.maxUsedPercent }.max()
             let throttled = cards.contains { $0.isThrottled }
             // Skip kinds with no percentage AND nothing meaningful to show.
             if pct == nil && cards.allSatisfy({ $0.status == .notInstalled }) { continue }
-            if pct == nil { continue }
+            if pct == nil {
+                if let text = menuText(for: kind, cards: cards) {
+                    chips.append(LabelChip(code: Theme.shortCode(for: kind), percent: nil,
+                                           throttled: throttled, valueText: text))
+                }
+                continue
+            }
             chips.append(LabelChip(code: Theme.shortCode(for: kind), percent: pct, throttled: throttled))
         }
         return chips
+    }
+
+    /// Menu-bar text for a provider that has recorded usage but no quota percentage.
+    private func menuText(for kind: ProviderKind, cards: [ProviderUsage]) -> String? {
+        guard kind == .grok else { return nil }
+        let costs = cards.compactMap(\.cost)
+        let today = costs.reduce(0.0) { $0 + $1.todayUSD }
+        if today > 0 { return Theme.usd(today) }
+        let recent = costs.reduce(0) { $0 + $1.last5hTokens }
+        if let text = Theme.compactTokens(recent) { return text }
+        let week = costs.reduce(0) { $0 + $1.last7dTokens }
+        return Theme.compactTokens(week)
     }
 
     // MARK: Settings
@@ -341,6 +388,7 @@ public final class AppModel {
             codexEnabled: codexEnabled,
             claudeEnabled: claudeEnabled,
             geminiEnabled: geminiEnabled,
+            grokEnabled: grokEnabled,
             notificationsEnabled: notificationsEnabled,
             menuBarStyle: menuBarStyle,
             monthlyBudgetUSD: monthlyBudgetUSD,
@@ -360,7 +408,8 @@ public final class AppModel {
         var config = settings.usageConfig(
             codexEnabled: draft.codexEnabled,
             claudeEnabled: draft.claudeEnabled,
-            geminiEnabled: draft.geminiEnabled
+            geminiEnabled: draft.geminiEnabled,
+            grokEnabled: draft.grokEnabled
         )
         Self.applyRuntimeOverrides(to: &config)
         let effectiveClaudeConfigs = Self.effectiveClaudeConfigs(for: config)
@@ -371,6 +420,7 @@ public final class AppModel {
         codexEnabled = draft.codexEnabled
         claudeEnabled = draft.claudeEnabled
         geminiEnabled = draft.geminiEnabled
+        grokEnabled = draft.grokEnabled
         notificationsEnabled = draft.notificationsEnabled
         menuBarStyle = draft.menuBarStyle
         monthlyBudgetUSD = draft.monthlyBudgetUSD
@@ -393,6 +443,7 @@ public final class AppModel {
         defaults.set(codexEnabled, forKey: "codexEnabled")
         defaults.set(claudeEnabled, forKey: "claudeEnabled")
         defaults.set(geminiEnabled, forKey: "geminiEnabled")
+        defaults.set(grokEnabled, forKey: "grokEnabled")
         defaults.set(notificationsEnabled, forKey: "notificationsEnabled")
         defaults.set(menuBarStyle.rawValue, forKey: "menuBarStyle")
         defaults.set(monthlyBudgetUSD, forKey: "monthlyBudgetUSD")
@@ -519,7 +570,8 @@ public final class AppModel {
         let config = Self.usageConfig(providerSettings: providerSettings,
                                       codexEnabled: codexEnabled,
                                       claudeEnabled: claudeEnabled,
-                                      geminiEnabled: geminiEnabled)
+                                      geminiEnabled: geminiEnabled,
+                                      grokEnabled: grokEnabled)
         appliedClaudeConfigs = Self.effectiveClaudeConfigs(for: config)
         if !claudeEnabled { lastClaude = [] }
         Task { await service.update(config: config) }
@@ -528,10 +580,12 @@ public final class AppModel {
     private static func usageConfig(providerSettings: ProviderSettings,
                                     codexEnabled: Bool,
                                     claudeEnabled: Bool,
-                                    geminiEnabled: Bool) -> UsageConfig {
+                                    geminiEnabled: Bool,
+                                    grokEnabled: Bool) -> UsageConfig {
         var config = providerSettings.usageConfig(codexEnabled: codexEnabled,
                                                   claudeEnabled: claudeEnabled,
-                                                  geminiEnabled: geminiEnabled)
+                                                  geminiEnabled: geminiEnabled,
+                                                  grokEnabled: grokEnabled)
         applyRuntimeOverrides(to: &config)
         return config
     }

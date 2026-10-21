@@ -35,7 +35,7 @@ public struct MenuBarLabelView: View {
                             Text(chip.code)
                                 .font(.system(size: 11, weight: .semibold))
                                 .opacity(0.75)
-                            Text(chip.percent.map { "\(Int($0.rounded()))%" } ?? "—")
+                            Text(chip.valueText ?? chip.percent.map { "\(Int($0.rounded()))%" } ?? "—")
                                 .font(.system(size: 11, weight: .bold))
                                 .monospacedDigit()
                             if chip.throttled {

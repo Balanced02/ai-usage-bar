@@ -7,11 +7,14 @@ public struct MenuBarMeterItem: Identifiable, Sendable {
     public var code: String
     public var fiveHour: Double?
     public var weekly: Double?
+    /// Shown instead of the dual bars when the provider has no quota percentage.
+    public var caption: String?
 
-    public init(code: String, fiveHour: Double?, weekly: Double?) {
+    public init(code: String, fiveHour: Double?, weekly: Double?, caption: String? = nil) {
         self.code = code
         self.fiveHour = fiveHour
         self.weekly = weekly
+        self.caption = caption
     }
 }
 
@@ -36,9 +39,15 @@ public struct MenuBarMetersView: View {
                         Text(item.code)
                             .font(.system(size: 9, weight: .semibold))
                             .opacity(0.8)
-                        VStack(spacing: 2) {
-                            MiniBar(percent: item.fiveHour)
-                            MiniBar(percent: item.weekly)
+                        if let caption = item.caption, item.fiveHour == nil, item.weekly == nil {
+                            Text(caption)
+                                .font(.system(size: 9, weight: .bold))
+                                .monospacedDigit()
+                        } else {
+                            VStack(spacing: 2) {
+                                MiniBar(percent: item.fiveHour)
+                                MiniBar(percent: item.weekly)
+                            }
                         }
                     }
                 }

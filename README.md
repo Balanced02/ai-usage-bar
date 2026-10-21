@@ -6,7 +6,7 @@
 
 **Every AI-coding limit, in your menu bar.**
 
-A tiny, native macOS menu-bar app that shows your **Claude**, **Codex**, and **Gemini**
+A tiny, native macOS menu-bar app that shows your **Claude**, **Codex**, **Gemini**, and **Grok**
 usage — 5-hour and weekly windows, reset timers, burn-rate warnings — for multiple
 accounts at a glance. Everything is read locally; nothing leaves your machine.
 
@@ -34,7 +34,7 @@ accounts at a glance. Everything is read locally; nothing leaves your machine.
 
 ## Features
 
-- **All your providers, one glance** — tabs for Claude, Codex, and Gemini. Claude shows
+- **All your providers, one glance** — tabs for Claude, Codex, Gemini, and Grok. Claude shows
   **multiple profiles** (e.g. personal + work) stacked together, color-coded.
 - **Per-model windows** — `5H`, `7D`, and per-model weekly meters (`7D FABLE`, `7D OPUS`,
   `7D SONNET`) that appear only when you've used that model.
@@ -78,6 +78,7 @@ Everything is local — no proxy, no telemetry, no account of ours.
 | **Codex** | Newest `token_count` event under the configured Codex root (defaults to `$CODEX_HOME`, then `~/.codex`) — real 5h/weekly %, resets, plan, credits, tokens. Zero-auth. | ✅ Full |
 | **Claude** | `GET api.anthropic.com/api/oauth/usage` per account, using a token the app mints via its **own** OAuth (**Add account**) and keeps in its **own** Keychain item — no prompt, refreshed in place. Each account is user-named; point it at a logs folder to also show **$ cost** + tokens + plan (from local `~/.claude` logs — there's no cost API). | ✅ Full % |
 | **Gemini** | Detects `gemini-cli` and reads the selected configuration root (defaults to `~/.gemini`); shows the plan cap or "not detected". gemini-cli persists no live quota. | ⚠️ Best-effort |
+| **Grok** | Session ledgers under the configured Grok root (defaults to `~/.grok`): `sessions/<cwd>/<id>/usage.json`, the same file `grok usage` prints, for recorded 5h / 7d / 30d tokens and dollars. The plan limit and its reset come from the latest billing check the Grok CLI logs (`logs/unified.jsonl`) — a weekly or monthly % bar, plus on-demand when that cap is present. No extra sign-in. The bar updates when Grok itself refreshes billing. | ✅ Limit % + cost |
 | **Custom** | Any folder of `.jsonl` logs + the dot-paths you configure (e.g. `rate_limit.used_percent`, `rate_limit.resets_at`). Newest file, last matching line. | ✅ Whatever the tool writes |
 
 Claude profiles are **auto-discovered** by parsing `CLAUDE_CONFIG_DIR=…` out of your shell rc
@@ -133,8 +134,8 @@ item. It never opens automatically at launch. **General** manages refresh cadenc
 style, monthly budget, notifications, **Mask account details**, and launch at login; **Providers**
 enables or disables each service; **Data locations** selects provider configuration roots.
 
-Choose a Codex or Gemini configuration-root **folder**, not an executable. By default Codex uses
-`$CODEX_HOME` then `~/.codex`, and Gemini uses `~/.gemini`; **Choose folder** overrides that root
+Choose a Codex, Gemini, or Grok configuration-root **folder**, not an executable. By default Codex uses
+`$CODEX_HOME` then `~/.codex`, Gemini uses `~/.gemini`, and Grok uses `~/.grok`; **Choose folder** overrides that root
 and **Use automatic** restores the default lookup. Claude profiles are auto-discovered from shell
 configuration; use **Rescan** to refresh that list, and add named manual profiles to supplement
 automatic discovery. **Apply** validates, saves, and refreshes the configuration; **Cancel**

@@ -11,6 +11,16 @@ as you cut a tag.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-21
+
+### Added
+- **Grok.** A Grok tab reads local session ledgers for recorded token and dollar totals
+  (5h / 7d / 30d, by model and project). The plan limit is a percentage bar with its reset
+  time — weekly or monthly, whichever period the account is on — taken from the latest billing
+  check the Grok CLI already logged. An on-demand bar appears when that cap is present. The menu
+  bar shows the limit %. There is no extra sign-in and no network call. The bar updates when
+  Grok itself refreshes billing.
+
 ## [0.3.2] - 2026-08-04
 
 ### Added

@@ -59,7 +59,7 @@ struct PreviewPanel: View {
     let kind: ProviderKind
     var masked: Bool = false
     var body: some View {
-        let kinds = [ProviderKind.claude, .codex, .gemini, .custom].filter { k in providers.contains { $0.kind == k } }
+        let kinds = [ProviderKind.claude, .codex, .gemini, .grok, .custom].filter { k in providers.contains { $0.kind == k } }
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("AI Usage").font(.headline)
@@ -99,6 +99,7 @@ private struct SettingsPreviewFixture {
         monthlyBudget: "$250",
         codexRoot: "/config/codex",
         geminiRoot: "/config/gemini",
+        grokRoot: "/config/grok",
         automaticClaudeName: "Personal",
         automaticClaudeRoot: "/config/claude",
         manualClaudeName: "Studio",
@@ -110,6 +111,7 @@ private struct SettingsPreviewFixture {
     let monthlyBudget: String
     let codexRoot: String
     let geminiRoot: String
+    let grokRoot: String
     let automaticClaudeName: String
     let automaticClaudeRoot: String
     let manualClaudeName: String
@@ -166,6 +168,8 @@ private struct SettingsPreview: View {
                 toggleRow("Claude")
                 rowDivider
                 toggleRow("Gemini")
+                rowDivider
+                toggleRow("Grok")
             }
         }
     }
@@ -176,6 +180,8 @@ private struct SettingsPreview: View {
                 dataRootRow(label: "Codex data folder", path: fixture.codexRoot)
                 rowDivider
                 dataRootRow(label: "Gemini data folder", path: fixture.geminiRoot)
+                rowDivider
+                dataRootRow(label: "Grok data folder", path: fixture.grokRoot)
                 rowDivider
                 subsectionTitle("Automatic Claude profiles")
                 profileRow(name: fixture.automaticClaudeName,
@@ -404,6 +410,10 @@ func mockProviders() -> [ProviderUsage] {
                       cost: mockCost, status: .ok, lastUpdated: Date()),
         ProviderUsage(id: "gemini", kind: .gemini, displayName: "Gemini",
                       status: .notInstalled, detail: "Not detected — install gemini-cli"),
+        ProviderUsage(id: "grok", kind: .grok, displayName: "Grok",
+                      windows: [w(.weekly, 18, 10080, 120)],
+                      cost: mockCost, status: .ok, detail: "1.2k tok · 7d $4.00",
+                      lastUpdated: Date()),
         ProviderUsage(id: "custom:openrouter", kind: .custom, displayName: "OpenRouter",
                       windows: [w(.other, 34, 1440, 20, name: "Daily")],
                       status: .ok, lastUpdated: Date()),

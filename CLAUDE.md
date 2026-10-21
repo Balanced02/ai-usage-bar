@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Guidance for working in **ai-usage-bar** — a native macOS menu-bar app (SwiftUI + AppKit)
-that shows Claude / Codex / Gemini usage. Everything is read from local files and the
+that shows Claude / Codex / Gemini / Grok usage. Everything is read from local files and the
 Keychain; the only network calls are Claude's own OAuth usage endpoints with the user's token.
 
 ## Commands
@@ -11,7 +11,7 @@ swift build                       # build all targets
 swift test                        # Core unit tests (readers, cost, history, discovery)
 Scripts/build-app.sh --run        # build + assemble the .app and launch
 Scripts/build-app.sh --install    # copy to /Applications and launch (for launch-at-login)
-swift run usageprobe codex        # print parsed usage: codex|claude|gemini|all|profiles|statusline
+swift run usageprobe codex        # print parsed usage: codex|claude|gemini|grok|all|profiles|statusline
 swift run previewgen <dir>        # render the UI to PNGs (used for README screenshots)
 swift run icongen out.png         # render the app icon
 Scripts/install-hooks.sh          # activate the pre-commit personal-data guard (do this once)
@@ -20,7 +20,7 @@ Scripts/install-hooks.sh          # activate the pre-commit personal-data guard 
 ## Architecture
 
 - **`Sources/AIUsageBarCore`** — pure logic, **no UI**, unit-tested. One reader per provider
-  (`CodexReader`, `Claude/*`, `GeminiReader`), the models (`Models.swift`), `UsageService`
+  (`CodexReader`, `Claude/*`, `GeminiReader`, `GrokReader`), the models (`Models.swift`), `UsageService`
   (aggregator), `UsageHistory` (on-disk timeseries), `Pricing` + `Claude/ClaudeCostReader`
   (cost), `Projection` (burn-rate), `ClaudeProfileDiscovery` (aliases → profiles).
 - **`Sources/AIUsageBarUI`** — SwiftUI views + `AppModel` (`@Observable`, the app state) +
@@ -59,6 +59,13 @@ Scripts/install-hooks.sh          # activate the pre-commit personal-data guard 
 - **Cost** — subscriptions have no per-token bill, so cost is an **equivalent API cost**:
   local JSONL token counts × per-model pricing (`Pricing.swift`).
 - **Gemini** — detection only; no local live quota exists.
+- **Grok** — `~/.grok/sessions/<percent-encoded-cwd>/<id>/usage.json` (override the root in
+  Settings). Same ledger as `grok usage`: per-turn tokens and `costUsdTicks` (10^10 ticks per USD).
+  Aggregate turns by `endedAt` for 5h / 7d / 30d. The plan-limit bar is **not** in the ledger. The
+  CLI logs it as `billing: fetched credits config` in `logs/unified.jsonl` (`creditUsagePercent`
+  is already 0–100; `currentPeriod.end` is the reset; type is weekly or monthly). Tail-read that
+  file. Never open `auth.json` (it holds the refresh token) and do not call the billing endpoint.
+  The project label is only the cwd's last path component.
 - **Custom** — user-configured (`CustomProvider`/`CustomProviderConfig`): a folder of `.jsonl` logs
   + dot-paths to the rate-limit fields, grouped under the `.custom` kind. Configured in Settings →
   Custom providers; persisted in `ProviderSettings`. Adding a *built-in* provider = a reader that

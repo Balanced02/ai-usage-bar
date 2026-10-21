@@ -8,14 +8,16 @@ public struct ProviderSettings: Codable, Sendable, Hashable {
     public static let defaultsKey = "providerSettings"
     public var codexHome: URL?
     public var geminiHome: URL?
+    public var grokHome: URL?
     public var claudeAccountConfigs: [String: ClaudeAccountConfig]
     public var customProviders: [CustomProviderConfig]
 
-    public init(codexHome: URL? = nil, geminiHome: URL? = nil,
+    public init(codexHome: URL? = nil, geminiHome: URL? = nil, grokHome: URL? = nil,
                 claudeAccountConfigs: [String: ClaudeAccountConfig] = [:],
                 customProviders: [CustomProviderConfig] = []) {
         self.codexHome = codexHome?.standardizedFileURL
         self.geminiHome = geminiHome?.standardizedFileURL
+        self.grokHome = grokHome?.standardizedFileURL
         self.claudeAccountConfigs = claudeAccountConfigs
         self.customProviders = customProviders
     }
@@ -23,20 +25,23 @@ public struct ProviderSettings: Codable, Sendable, Hashable {
     // Tolerant decoder so older saved settings (without newer fields, or with the
     // retired `manualClaudeProfiles` key) still load.
     private enum CodingKeys: String, CodingKey {
-        case codexHome, geminiHome, claudeAccountConfigs, customProviders
+        case codexHome, geminiHome, grokHome, claudeAccountConfigs, customProviders
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         codexHome = try c.decodeIfPresent(URL.self, forKey: .codexHome)
         geminiHome = try c.decodeIfPresent(URL.self, forKey: .geminiHome)
+        grokHome = try c.decodeIfPresent(URL.self, forKey: .grokHome)
         claudeAccountConfigs = try c.decodeIfPresent([String: ClaudeAccountConfig].self,
                                                      forKey: .claudeAccountConfigs) ?? [:]
         customProviders = try c.decodeIfPresent([CustomProviderConfig].self, forKey: .customProviders) ?? []
     }
 
-    public func usageConfig(codexEnabled: Bool, claudeEnabled: Bool, geminiEnabled: Bool) -> UsageConfig {
+    public func usageConfig(codexEnabled: Bool, claudeEnabled: Bool, geminiEnabled: Bool,
+                            grokEnabled: Bool = true) -> UsageConfig {
         UsageConfig(codexEnabled: codexEnabled, claudeEnabled: claudeEnabled,
-                    geminiEnabled: geminiEnabled, codexHome: codexHome, geminiHome: geminiHome,
+                    geminiEnabled: geminiEnabled, grokEnabled: grokEnabled,
+                    codexHome: codexHome, geminiHome: geminiHome, grokHome: grokHome,
                     claudeAccountConfigs: claudeAccountConfigs, customProviders: customProviders)
     }
 

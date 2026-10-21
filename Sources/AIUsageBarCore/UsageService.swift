@@ -5,8 +5,10 @@ public struct UsageConfig: Sendable {
     public var codexEnabled: Bool
     public var claudeEnabled: Bool
     public var geminiEnabled: Bool
+    public var grokEnabled: Bool
     public var codexHome: URL?
     public var geminiHome: URL?
+    public var grokHome: URL?
     /// Per-account user config (name + optional logs dir), keyed by account key.
     /// Accounts themselves come from the OAuth token store, not path discovery.
     public var claudeAccountConfigs: [String: ClaudeAccountConfig]
@@ -16,15 +18,18 @@ public struct UsageConfig: Sendable {
     public var allowKeychain: Bool
 
     public init(codexEnabled: Bool = true, claudeEnabled: Bool = true, geminiEnabled: Bool = true,
-                codexHome: URL? = nil, geminiHome: URL? = nil,
+                grokEnabled: Bool = true,
+                codexHome: URL? = nil, geminiHome: URL? = nil, grokHome: URL? = nil,
                 claudeAccountConfigs: [String: ClaudeAccountConfig] = [:],
                 customProviders: [CustomProviderConfig] = [],
                 claudeMinInterval: TimeInterval = 180, allowKeychain: Bool = true) {
         self.codexEnabled = codexEnabled
         self.claudeEnabled = claudeEnabled
         self.geminiEnabled = geminiEnabled
+        self.grokEnabled = grokEnabled
         self.codexHome = codexHome
         self.geminiHome = geminiHome
+        self.grokHome = grokHome
         self.claudeAccountConfigs = claudeAccountConfigs
         self.customProviders = customProviders
         self.claudeMinInterval = claudeMinInterval
@@ -32,8 +37,8 @@ public struct UsageConfig: Sendable {
     }
 }
 
-/// Aggregates all providers into a single snapshot. Codex and Gemini are read
-/// from local files every refresh; Claude's live endpoint is throttled and cached.
+/// Aggregates all providers into a single snapshot. Codex, Gemini, and Grok are
+/// read from local files every refresh; Claude's live endpoint is throttled and cached.
 public actor UsageService {
     public var config: UsageConfig
     private var claudeCache: [ProviderUsage] = []
@@ -56,15 +61,17 @@ public actor UsageService {
         if config.codexEnabled { out.append(CodexReader(codexHome: config.codexHome).read()) }
         if config.claudeEnabled { out.append(contentsOf: await claude(now: now)) }
         if config.geminiEnabled { out.append(GeminiReader(geminiHome: config.geminiHome).read()) }
+        if config.grokEnabled { out.append(GrokReader(grokHome: config.grokHome).read()) }
         for cfg in config.customProviders { out.append(CustomProvider(config: cfg).read()) }
         return out
     }
 
-    /// Fast, local-only providers (Codex + Gemini) — safe to read every refresh
+    /// Fast, local-only providers (Codex, Gemini, Grok) — safe to read every refresh
     /// and never blocks on the network or Keychain.
-    public func readLocal() -> (codex: ProviderUsage?, gemini: ProviderUsage?, customs: [ProviderUsage]) {
+    public func readLocal() -> (codex: ProviderUsage?, gemini: ProviderUsage?, grok: ProviderUsage?, customs: [ProviderUsage]) {
         (config.codexEnabled ? CodexReader(codexHome: config.codexHome).read() : nil,
          config.geminiEnabled ? GeminiReader(geminiHome: config.geminiHome).read() : nil,
+         config.grokEnabled ? GrokReader(grokHome: config.grokHome).read() : nil,
          config.customProviders.map { CustomProvider(config: $0).read() })
     }
 
